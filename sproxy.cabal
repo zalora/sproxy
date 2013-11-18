@@ -1,0 +1,36 @@
+name:                sproxy
+version:             0.1.0
+-- synopsis:            
+-- description:         
+license:             GPL-3
+license-file:        LICENSE
+author:              Chris Forno
+maintainer:          jekor@jekor.com
+-- copyright:           
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable sproxy
+  main-is:             sproxy.hs
+  other-modules:       Cookies
+  build-depends:       aeson,
+                       base >=4.6 && <4.7,
+                       bytestring,
+                       concurrent-extra,
+                       ConfigFile,
+                       curl,
+                       HTTP >= 4000.2,
+                       http-types,
+                       mtl,
+                       network,
+                       parsec,
+                       SHA,
+                       split,
+                       unordered-containers,
+                       unix,
+                       utf8-string
+  default-extensions:  OverloadedStrings
+  default-language:    Haskell2010
+  other-extensions:    ScopedTypeVariables
+  ghc-options:         -Wall -fno-warn-missing-signatures -fno-warn-type-defaults -fno-warn-unused-do-bind -threaded -O2
