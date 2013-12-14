@@ -1,15 +1,16 @@
 module Cookies (processCookieHeaders, setCookie, AuthToken(..), authToken, validAuth, authShelfLife) where
 
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Char
 import Data.Digest.Pure.SHA (hmacSha1, showDigest)
 import Data.List.Split (splitOn)
-import Data.Maybe
 import Network.HTTP.Cookie hiding (processCookieHeaders)
-import Network.HTTP.Headers
+import Network.HTTP.Types.Header (Header)
 import System.Posix.Time (epochTime)
 import System.Posix.Types (EpochTime)
-import Text.ParserCombinators.Parsec (Parser, char, many, many1, satisfy, parse, (<|>), sepBy1)
+import Text.Parsec (char, many, many1, satisfy, parse, (<|>), sepBy1)
+import Text.Parsec.ByteString (Parser)
 import Text.Read (readMaybe)
 
 data AuthToken = AuthToken { authEmail  :: String
@@ -71,12 +72,12 @@ setCookie cookie maxAge =
 -- headerToCookies in Network.HTTP.Cookie is designed to work with the
 -- Set-Cookie header. This is a variant for the Cookie header
 -- (HdrSetCookie -> HdrCookie).
-processCookieHeaders :: String -> [Header] -> ([String], [Cookie])
+processCookieHeaders :: String -> [Header] -> ([BS.ByteString], [Cookie])
 processCookieHeaders dom hdrs = foldr (headerToCookies dom) ([],[]) hdrs
 
 -- | @headerToCookies dom hdr acc@ 
-headerToCookies :: String -> Header -> ([String], [Cookie]) -> ([String], [Cookie])
-headerToCookies dom (Header HdrCookie val) (accErr, accCookie) = 
+headerToCookies :: String -> Header -> ([BS.ByteString], [Cookie]) -> ([BS.ByteString], [Cookie])
+headerToCookies dom ("Cookie", val) (accErr, accCookie) = 
     case parse cookies "" val of
         Left{}  -> (val:accErr, accCookie)
         Right x -> (accErr, x ++ accCookie)
@@ -91,7 +92,7 @@ headerToCookies dom (Header HdrCookie val) (accErr, accCookie) =
           ; char '='
           ; spaces_l
           ; val1 <- cvalue
-          ; return $ mkCookie name val1 []
+          ; return $ mkCookie name val1
           }
 
    cvalue :: Parser String
@@ -100,14 +101,14 @@ headerToCookies dom (Header HdrCookie val) (accErr, accCookie) =
 
    cvalue = quotedstring <|> many1 (satisfy $ not . (==';')) <|> return ""
    
-   mkCookie :: String -> String -> [(String,String)] -> Cookie
-   mkCookie nm cval more = 
+   mkCookie :: String -> String -> Cookie
+   mkCookie nm cval = 
 	  MkCookie { ckName    = nm
                    , ckValue   = cval
-                   , ckDomain  = map toLower (fromMaybe dom (lookup "domain" more))
-                   , ckPath    = lookup "path" more
-                   , ckVersion = lookup "version" more
-                   , ckComment = lookup "comment" more
+                   , ckDomain  = map toLower dom
+                   , ckPath    = Nothing
+                   , ckVersion = Nothing
+                   , ckComment = Nothing
                    }
 headerToCookies _ _ acc = acc
 

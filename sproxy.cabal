@@ -1,5 +1,5 @@
 name:                sproxy
-version:             0.1.0
+version:             0.3.0
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -13,13 +13,19 @@ cabal-version:       >=1.10
 
 executable sproxy
   main-is:             sproxy.hs
-  other-modules:       Cookies
+  other-modules:       Cookies,
+                       HTTP
   build-depends:       aeson,
+                       attoparsec,
                        base >=4.6 && <4.7,
                        bytestring,
+                       case-insensitive,
+                       certificate,
                        concurrent-extra,
                        ConfigFile,
+                       crypto-random,
                        curl,
+                       hslogger,
                        HTTP >= 4000.2,
                        http-types,
                        mtl,
@@ -27,6 +33,13 @@ executable sproxy
                        parsec,
                        SHA,
                        split,
+                       time,
+                       -- The openssl library is not thread safe, at
+                       -- least not the way that HsOpenSSL uses it in
+                       -- my testing (segfaults), so I'm using the
+                       -- Haskell-native tls library instead.
+                       tls,
+                       tls-extra,
                        unordered-containers,
                        unix,
                        utf8-string
