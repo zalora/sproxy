@@ -57,8 +57,7 @@ data Config = Config { cfDomain :: String
                      , cfClientID :: String
                      , cfClientSecret :: String
                      , cfAuthTokenKey :: String
-                     , cfSSLKey :: TLS.PrivateKey
-                     , cfSSLCert :: X509
+                     , cfCertificates :: [(X509, Maybe TLS.PrivateKey)]
                      , cfAuthorizedEmails :: [String]
                      }
 
@@ -89,17 +88,21 @@ main = do
          authTokenKey <- CF.get cf "DEFAULT" "auth_token_key"
          sslKeyFile <- CF.get cf "DEFAULT" "ssl_key"
          sslCertFile <- CF.get cf "DEFAULT" "ssl_cert"
+         sslExtraCertFiles <- words `fmap` CF.get cf "DEFAULT" "ssl_extra_certs"
          sslKey <- liftIO $ TLS.fileReadPrivateKey sslKeyFile
          sslCert <- liftIO $ TLS.fileReadCertificate sslCertFile
+         sslExtraCerts <- liftIO $ mapM TLS.fileReadCertificate sslExtraCertFiles
          -- We'll need more complex rules for access control, but for now let's just use a list.
          authorizedEmails <- words `fmap` CF.get cf "DEFAULT" "authorized_emails"
-         return $ Config domain contact url clientID clientSecret authTokenKey sslKey sslCert authorizedEmails
+         let certs = (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
+         return $ Config domain contact url clientID clientSecret authTokenKey certs authorizedEmails
 
 serve :: Config -> Handle -> IO ()
 serve cf h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
-  let params = TLS.defaultParamsServer { TLS.pCertificates = [(cfSSLCert cf, Just $ cfSSLKey cf)]
+  let params = TLS.defaultParamsServer { TLS.pCertificates = cfCertificates cf
                                        , TLS.pCiphers = TLS.ciphersuite_all
+                                       , TLS.pUseSecureRenegotiation = True
                                        }
   ctx <- TLS.contextNewOnHandle h params rng
   TLS.handshake ctx
