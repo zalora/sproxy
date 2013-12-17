@@ -1,4 +1,4 @@
-module HTTP (Request, Response, oneRequest, oneResponse, rawRequest, rawResponse) where
+module HTTP (Request, Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, decimal)
@@ -77,7 +77,11 @@ rawRequest (method, url, headers, body) =
 
 rawResponse :: Response -> BL.ByteString
 rawResponse (status, headers, body) =
-  BL.fromChunks (["HTTP/1.1 ", BU.fromString $ show (statusCode status), " ", statusMessage status] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
+  BL.fromChunks (["HTTP/1.1 ", BU.fromString $ show (statusCode status), " ", statusMessage status, "\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
 
 headerBS :: Header -> BS.ByteString
 headerBS (k, v) = CI.original k `BS.append` ": " `BS.append` v `BS.append` "\r\n"
+
+-- convenience responses
+response :: Int -> BS.ByteString -> [Header] -> BL.ByteString -> Response
+response code message headers body = (mkStatus code message, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)

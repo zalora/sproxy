@@ -75,6 +75,8 @@ main = do
       -- the main thread is special and expensive to communicate with.
       wait <- newEmptyMVar
       forkIO (handle handleError (listen (PortNumber 443) (serve config)) `finally` (putMVar wait ()))
+      -- Listen on port 80 just to redirect everything to HTTPS.
+      forkIO (handle handleError (listen (PortNumber 80) (redirectToHttps config)))
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
@@ -96,6 +98,17 @@ main = do
          authorizedEmails <- words `fmap` CF.get cf "DEFAULT" "authorized_emails"
          let certs = (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
          return $ Config domain contact url clientID clientSecret authTokenKey certs authorizedEmails
+
+redirectToHttps :: Config -> Handle -> IO ()
+redirectToHttps cf h = do
+  input <- BL.hGetContents h
+  case oneRequest input of
+    (Nothing, _) -> return ()
+    (Just _, _) -> do
+      -- For now, don't even try to intelligently redirect the request,
+      -- just send them to the URL from the config. Maybe later we can do
+      -- something fancier.
+      BL.hPutStr h $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ cfURL cf)] ""
 
 serve :: Config -> Handle -> IO ()
 serve cf h = do
@@ -127,8 +140,8 @@ serve cf h = do
                      tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ cfClientSecret cf, "redirect_uri=" ++ cfURL cf, "grant_type=authorization_code"]
                      case tokenRes of
                        Left err -> internalServerError c err >> serve' c rest
-                       Right response -> do
-                         case Aeson.decode $ BLU.fromString $ Curl.respBody response of
+                       Right resp -> do
+                         case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
                            Nothing -> internalServerError c "Received an invalid response from Google's authentication server." >> serve' c rest
                            Just token -> do
                              infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
@@ -139,7 +152,9 @@ serve cf h = do
                                    Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
                                    Just userInfo -> do
                                      clientToken <- authToken (cfAuthTokenKey cf) (userEmail userInfo)
-                                     TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nSet-Cookie: " ++ setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife ++ "\r\nLocation: " ++ cfURL cf ++ "\r\nContent-Length: 0\r\n\r\n"
+                                     let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
+                                         resp' = response 302 "Found" [("Location", BU.fromString $ cfURL cf), ("Set-Cookie", BU.fromString cookie)] ""
+                                     TLS.sendData c $ rawResponse resp'
                                      serve' c rest
                    _ -> do
                      -- Check for an auth cookie.
@@ -155,7 +170,7 @@ serve cf h = do
                              when continue $ serve' c rest
        redirectForAuth c = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ cfURL cf ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
-         TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nLocation: " ++ authURL ++ "\r\nContent-Length: 0\r\n\r\n"
+         TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 requestWithEmail :: TLS.Context -> Request -> [String] -> String -> String -> IO (Bool)
@@ -167,13 +182,15 @@ requestWithEmail c (method, url, headers, body) authorizedEmails email _ | email
   input <- BL.hGetContents h
   continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
-                (Just response@(_, headers', _), _) -> do
-                  TLS.sendData c $ rawResponse response
+                (Just resp@(_, headers', _), _) -> do
+                  TLS.sendData c $ rawResponse resp
                   return $ lookup "Connection" headers' /= Just "close"
   hClose h
   return continue
 -- TODO: Send out a page that allows the user to request authorization.
-requestWithEmail c _ _ _ _ = TLS.sendData c "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n" >> return True
+requestWithEmail c _ _ _ _ = do
+  TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
+  return True
 
 log s = do
   tid <- myThreadId
@@ -183,7 +200,7 @@ log s = do
 internalServerError c err = do
   log $ show err
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
-  TLS.sendData c "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+  TLS.sendData c $ rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
 listen :: PortID -> (Handle -> IO ()) -> IO ()
 listen port f = do
