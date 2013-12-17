@@ -8,7 +8,7 @@ import HTTP
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
 import Control.Exception (finally, bracketOnError, handle, throw, SomeException)
-import Control.Monad (forever, mzero, join, liftM)
+import Control.Monad (forever, mzero, join, liftM, when)
 import Control.Monad.Error (runErrorT)
 import Control.Monad.Trans (liftIO)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
@@ -151,26 +151,29 @@ serve cf h = do
                          case auth of
                            Nothing -> redirectForAuth c >> serve' c rest
                            Just token -> do
-                             requestWithEmail c request (cfAuthorizedEmails cf) (authEmail token) (cfContact cf)
-                             serve' c rest
+                             continue <- requestWithEmail c request (cfAuthorizedEmails cf) (authEmail token) (cfContact cf)
+                             when continue $ serve' c rest
        redirectForAuth c = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ cfURL cf ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
          TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nLocation: " ++ authURL ++ "\r\nContent-Length: 0\r\n\r\n"
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-requestWithEmail :: TLS.Context -> Request -> [String] -> String -> String -> IO ()
+requestWithEmail :: TLS.Context -> Request -> [String] -> String -> String -> IO (Bool)
 requestWithEmail c (method, url, headers, body) authorizedEmails email _ | email `elem` authorizedEmails = do
   -- TODO: Make the backend address configurable.
   -- TODO: Reuse connections to the backend server.
   h <- connectTo "127.0.0.1" $ PortNumber 8080
   BL.hPutStr h $ rawRequest (method, url, headers ++ [("From", BU.fromString email)], body)
   input <- BL.hGetContents h
-  case oneResponse input of
-    (Nothing, _) -> return () -- no more responses
-    (Just response, _) -> TLS.sendData c $ rawResponse response
+  continue <- case oneResponse input of
+                (Nothing, _) -> return False -- no more responses
+                (Just response@(_, headers', _), _) -> do
+                  TLS.sendData c $ rawResponse response
+                  return $ lookup "Connection" headers' /= Just "close"
   hClose h
+  return continue
 -- TODO: Send out a page that allows the user to request authorization.
-requestWithEmail c _ _ _ _ = TLS.sendData c "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+requestWithEmail c _ _ _ _ = TLS.sendData c "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n" >> return True
 
 log s = do
   tid <- myThreadId
