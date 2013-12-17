@@ -7,7 +7,7 @@ import HTTP
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
-import Control.Exception (finally, bracketOnError, handle, SomeException)
+import Control.Exception (finally, bracketOnError, handle, throw, SomeException)
 import Control.Monad (forever, mzero, join, liftM)
 import Control.Monad.Error (runErrorT)
 import Control.Monad.Trans (liftIO)
@@ -186,7 +186,9 @@ listen port f = do
   s <- listenOn port
   forever $ do
     (h, _, _) <- accept s
-    forkIO $ f h
+    forkIO $ handle logError (f h)
+ where logError :: SomeException -> IO ()
+       logError e = log $ show e >> throw e
 
 curl :: Curl.URLString -> [Curl.CurlOption] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 curl url options = Curl.withCurlDo $ do
