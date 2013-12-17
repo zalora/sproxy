@@ -114,6 +114,7 @@ serve cf h = do
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
            (Just request@(_, url, headers, _), rest) -> do
+             -- TODO: Don't loop for more input on Connection: close header.
              log $ show request
              -- Check if this is an authorization response.
              case URI.parseURIReference $ BU.toString url of
@@ -138,7 +139,7 @@ serve cf h = do
                                    Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
                                    Just userInfo -> do
                                      clientToken <- authToken (cfAuthTokenKey cf) (userEmail userInfo)
-                                     TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nSet-Cookie: " ++ setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife ++ "\r\nLocation: " ++ cfURL cf ++ "\r\n\r\n"
+                                     TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nSet-Cookie: " ++ setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife ++ "\r\nLocation: " ++ cfURL cf ++ "\r\nContent-Length: 0\r\n\r\n"
                                      serve' c rest
                    _ -> do
                      -- Check for an auth cookie.
@@ -154,7 +155,7 @@ serve cf h = do
                              serve' c rest
        redirectForAuth c = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ cfURL cf ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
-         TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nLocation: " ++ authURL ++ "\r\n\r\n"
+         TLS.sendData c $ BLU.fromString $ "HTTP/1.1 302 Found\r\nLocation: " ++ authURL ++ "\r\nContent-Length: 0\r\n\r\n"
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 requestWithEmail :: TLS.Context -> Request -> [String] -> String -> String -> IO ()
@@ -169,7 +170,7 @@ requestWithEmail c (method, url, headers, body) authorizedEmails email _ | email
     (Just response, _) -> TLS.sendData c $ rawResponse response
   hClose h
 -- TODO: Send out a page that allows the user to request authorization.
-requestWithEmail c _ _ _ _ = TLS.sendData c "HTTP/1.1 403 Forbidden\r\n\r\n"
+requestWithEmail c _ _ _ _ = TLS.sendData c "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
 
 log s = do
   tid <- myThreadId
@@ -188,7 +189,7 @@ listen port f = do
     (h, _, _) <- accept s
     forkIO $ handle logError (f h)
  where logError :: SomeException -> IO ()
-       logError e = log $ show e >> throw e
+       logError e = log (show e) >> throw e
 
 curl :: Curl.URLString -> [Curl.CurlOption] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 curl url options = Curl.withCurlDo $ do
