@@ -205,6 +205,7 @@ internalServerError c err = do
 listen :: PortID -> (Handle -> IO ()) -> IO ()
 listen port f = do
   s <- listenOn port
+  putStrLn ("listening on port " ++ show port)
   forever $ do
     (h, _, _) <- accept s
     forkIO $ handle logError (f h)
