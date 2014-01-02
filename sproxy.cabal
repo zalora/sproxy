@@ -30,6 +30,7 @@ executable sproxy
                        http-types,
                        mtl,
                        network,
+                       optparse-applicative,
                        parsec,
                        SHA,
                        split,

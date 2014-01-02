@@ -30,7 +30,8 @@ import qualified Network.Socket as Socket
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
-import System.IO (Handle, stdin, hClose)
+import Options.Applicative
+import System.IO (Handle, stdin, hClose, openFile, IOMode (ReadMode))
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
 
@@ -61,13 +62,36 @@ data Config = Config { cfDomain :: String
                      , cfAuthorizedEmails :: [String]
                      }
 
-main = do
+
+data SProxyApp = SProxyApp {
+  appConfig :: FilePath
+}
+
+main :: IO ()
+main = execParser opts >>= runWithOptions
+  where
+    parser = SProxyApp <$> strOption (long "config" <>
+                                      metavar "CONFIG" <>
+                                      help "config file path")
+    opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
+
+
+runWithOptions :: SProxyApp -> IO ()
+runWithOptions opts = do
   -- Make sure we have all necessary config options. Read them from stdin.
   -- TODO: Reading these from stdin means that forgetting to provide
   -- them will result in what looks like a running daemon, but one
   -- that's not listening on any ports.
+
+  -- FIXME: nix expression seems to require no pipe, therefore adding
+  -- a flag to directly read from file with out "cat"
+  -- a quick and dirty modification, openFile would leak
+  configHandle  <- if (null (appConfig opts))
+                       then return $ stdin
+                       else openFile (appConfig opts) ReadMode
+
   Log.updateGlobalLogger "sproxy" (Log.setLevel Log.DEBUG)
-  config' <- getConfig
+  config' <- getConfig configHandle
   case config' of
     Left err -> log $ show err
     Right config -> do
@@ -80,8 +104,8 @@ main = do
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
-       getConfig = runErrorT $ do
-         cf <- join $ liftIO $ CF.readhandle CF.emptyCP stdin
+       getConfig configHandle = runErrorT $ do
+         cf <- join $ liftIO $ CF.readhandle CF.emptyCP configHandle
          domain <- CF.get cf "DEFAULT" "domain"
          contact <- CF.get cf "DEFAULT" "contact"
          url <- CF.get cf "DEFAULT" "url"
