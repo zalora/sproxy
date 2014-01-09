@@ -4,6 +4,7 @@ module Main where
 
 import Cookies
 import HTTP
+import Permissions
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
@@ -34,6 +35,7 @@ import System.IO (Handle, stdin, hClose, openFile, IOMode (ReadMode))
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
 import Data.Yaml
+import Data.String.Conversions
 
 import Prelude hiding (log)
 
@@ -61,23 +63,22 @@ data Config = Config { cfDomain :: String
                      , cfSslKey :: FilePath
                      , cfSslCert :: FilePath
                      , cfSslExtraCerts :: [FilePath]
-                     -- We'll need more complex rules for access control, but for now let's just use a list.
-                     , cfAuthorizedEmails :: [String]
+                     , cfPermissions :: Permissions
                      }
   deriving Show
 
 instance FromJSON Config where
-    parseJSON (Object o) = Config <$>
-        o .: "domain" <*>
-        o .: "contact" <*>
-        o .: "url" <*>
-        o .: "client_id" <*>
-        o .: "client_secret" <*>
-        o .: "auth_token_key" <*>
-        o .: "ssl_key" <*>
-        o .: "ssl_cert" <*>
-        o .: "ssl_extra_certs" <*>
-        o .: "authorized_emails"
+    parseJSON o@(Object m) = Config <$>
+        m .: "domain" <*>
+        m .: "contact" <*>
+        m .: "url" <*>
+        m .: "client_id" <*>
+        m .: "client_secret" <*>
+        m .: "auth_token_key" <*>
+        m .: "ssl_key" <*>
+        m .: "ssl_cert" <*>
+        m .: "ssl_extra_certs" <*>
+        parseJSON o
     parseJSON _ = mzero
 
 
@@ -195,31 +196,34 @@ serve cf certificates h = do
                          case auth of
                            Nothing -> redirectForAuth c >> serve' c rest
                            Just token -> do
-                             continue <- requestWithEmail c request (cfAuthorizedEmails cf) (authEmail token) (cfContact cf)
+                             continue <- requestWithEmail c request (cfPermissions cf) (authEmail token) (cfContact cf)
                              when continue $ serve' c rest
        redirectForAuth c = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ cfURL cf ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-requestWithEmail :: TLS.Context -> Request -> [String] -> String -> String -> IO (Bool)
-requestWithEmail c (method, url, headers, body) authorizedEmails email _ | email `elem` authorizedEmails = do
-  -- TODO: Make the backend address configurable.
-  -- TODO: Reuse connections to the backend server.
-  h <- connectTo "127.0.0.1" $ PortNumber 8080
-  BL.hPutStr h $ rawRequest (method, url, headers ++ [("From", BU.fromString email)], body)
-  input <- BL.hGetContents h
-  continue <- case oneResponse input of
+requestWithEmail :: TLS.Context -> Request -> Permissions -> String -> String -> IO (Bool)
+requestWithEmail c (method, url, headers, body) permissions email _ =
+    case isAuthorized permissions email (fmap cs $ lookup "Host" headers) (cs url) of
+        Right () -> do
+            -- TODO: Make the backend address configurable.
+            -- TODO: Reuse connections to the backend server.
+            h <- connectTo "127.0.0.1" $ PortNumber 8080
+            BL.hPutStr h $ rawRequest (method, url, headers ++ [("From", BU.fromString email)], body)
+            input <- BL.hGetContents h
+            continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
                 (Just resp@(_, headers', _), _) -> do
-                  TLS.sendData c $ rawResponse resp
-                  return $ lookup "Connection" headers' /= Just "close"
-  hClose h
-  return continue
--- TODO: Send out a page that allows the user to request authorization.
-requestWithEmail c _ _ _ _ = do
-  TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
-  return True
+                    TLS.sendData c $ rawResponse resp
+                    return $ lookup "Connection" headers' /= Just "close"
+            hClose h
+            return continue
+        -- TODO: Send out a page that allows the user to request authorization.
+        Left permissionError -> do
+            log ("authentication failed: " ++ permissionError)
+            TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
+            return True
 
 log s = do
   tid <- myThreadId

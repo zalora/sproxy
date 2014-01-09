@@ -22,6 +22,7 @@ executable sproxy
                        case-insensitive,
                        certificate,
                        concurrent-extra,
+                       containers >= 0.5,
                        crypto-random,
                        curl,
                        hslogger,
@@ -31,8 +32,10 @@ executable sproxy
                        network,
                        optparse-applicative,
                        parsec,
+                       safe,
                        SHA,
                        split,
+                       string-conversions,
                        time,
                        -- The openssl library is not thread safe, at
                        -- least not the way that HsOpenSSL uses it in
