@@ -22,7 +22,6 @@ executable sproxy
                        case-insensitive,
                        certificate,
                        concurrent-extra,
-                       ConfigFile,
                        crypto-random,
                        curl,
                        hslogger,
@@ -43,7 +42,8 @@ executable sproxy
                        tls-extra,
                        unordered-containers,
                        unix,
-                       utf8-string
+                       utf8-string,
+                       yaml >= 0.8
   default-extensions:  OverloadedStrings
   default-language:    Haskell2010
   other-extensions:    ScopedTypeVariables

@@ -18,7 +18,6 @@ import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Certificate.X509 (X509)
-import qualified Data.ConfigFile as CF
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
 import Network (PortID(..), listenOn, connectTo, accept)
@@ -34,6 +33,7 @@ import Options.Applicative
 import System.IO (Handle, stdin, hClose, openFile, IOMode (ReadMode))
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
+import Data.Yaml
 
 import Prelude hiding (log)
 
@@ -58,19 +58,49 @@ data Config = Config { cfDomain :: String
                      , cfClientID :: String
                      , cfClientSecret :: String
                      , cfAuthTokenKey :: String
-                     , cfCertificates :: [(X509, Maybe TLS.PrivateKey)]
+                     , cfSslKey :: FilePath
+                     , cfSslCert :: FilePath
+                     , cfSslExtraCerts :: [FilePath]
+                     -- We'll need more complex rules for access control, but for now let's just use a list.
                      , cfAuthorizedEmails :: [String]
                      }
+  deriving Show
+
+instance FromJSON Config where
+    parseJSON (Object o) = Config <$>
+        o .: "domain" <*>
+        o .: "contact" <*>
+        o .: "url" <*>
+        o .: "client_id" <*>
+        o .: "client_secret" <*>
+        o .: "auth_token_key" <*>
+        o .: "ssl_key" <*>
+        o .: "ssl_cert" <*>
+        o .: "ssl_extra_certs" <*>
+        o .: "authorized_emails"
+    parseJSON _ = mzero
+
+
+type Certificates = [(X509, Maybe TLS.PrivateKey)]
+
+loadSSLCertificates :: Config -> IO Certificates
+loadSSLCertificates config = do
+    sslKey <- TLS.fileReadPrivateKey (cfSslKey config)
+    sslCert <- TLS.fileReadCertificate (cfSslCert config)
+    sslExtraCerts <- mapM TLS.fileReadCertificate (cfSslExtraCerts config)
+    return $ (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
+
 
 
 data SProxyApp = SProxyApp {
-  appConfig :: FilePath
+  appConfigFile :: FilePath
 }
 
 main :: IO ()
 main = execParser opts >>= runWithOptions
   where
     parser = SProxyApp <$> strOption (long "config" <>
+                                      noArgError ShowHelpText <>
                                       metavar "CONFIG" <>
                                       help "config file path")
     opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
@@ -78,50 +108,25 @@ main = execParser opts >>= runWithOptions
 
 runWithOptions :: SProxyApp -> IO ()
 runWithOptions opts = do
-  -- Make sure we have all necessary config options. Read them from stdin.
-  -- TODO: Reading these from stdin means that forgetting to provide
-  -- them will result in what looks like a running daemon, but one
-  -- that's not listening on any ports.
-
-  -- FIXME: nix expression seems to require no pipe, therefore adding
-  -- a flag to directly read from file with out "cat"
-  -- a quick and dirty modification, openFile would leak
-  configHandle  <- if (null (appConfig opts))
-                       then return $ stdin
-                       else openFile (appConfig opts) ReadMode
+  -- Make sure we have all necessary config options. Read them from the given
+  -- config file.
 
   Log.updateGlobalLogger "sproxy" (Log.setLevel Log.DEBUG)
-  config' <- getConfig configHandle
+  config' :: Either ParseException Config <- decodeFileEither (appConfigFile opts)
   case config' of
-    Left err -> log $ show err
+    Left err -> log $ ("error parsing configuration file " ++
+        appConfigFile opts ++ ": " ++ show err)
     Right config -> do
+      certificates <- loadSSLCertificates config
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
       wait <- newEmptyMVar
-      forkIO (handle handleError (listen (PortNumber 443) (serve config)) `finally` (putMVar wait ()))
+      forkIO (handle handleError (listen (PortNumber 443) (serve config certificates)) `finally` (putMVar wait ()))
       -- Listen on port 80 just to redirect everything to HTTPS.
       forkIO (handle handleError (listen (PortNumber 80) (redirectToHttps config)))
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
-       getConfig configHandle = runErrorT $ do
-         cf <- join $ liftIO $ CF.readhandle CF.emptyCP configHandle
-         domain <- CF.get cf "DEFAULT" "domain"
-         contact <- CF.get cf "DEFAULT" "contact"
-         url <- CF.get cf "DEFAULT" "url"
-         clientID <- CF.get cf "DEFAULT" "client_id"
-         clientSecret <- CF.get cf "DEFAULT" "client_secret"
-         authTokenKey <- CF.get cf "DEFAULT" "auth_token_key"
-         sslKeyFile <- CF.get cf "DEFAULT" "ssl_key"
-         sslCertFile <- CF.get cf "DEFAULT" "ssl_cert"
-         sslExtraCertFiles <- words `fmap` CF.get cf "DEFAULT" "ssl_extra_certs"
-         sslKey <- liftIO $ TLS.fileReadPrivateKey sslKeyFile
-         sslCert <- liftIO $ TLS.fileReadCertificate sslCertFile
-         sslExtraCerts <- liftIO $ mapM TLS.fileReadCertificate sslExtraCertFiles
-         -- We'll need more complex rules for access control, but for now let's just use a list.
-         authorizedEmails <- words `fmap` CF.get cf "DEFAULT" "authorized_emails"
-         let certs = (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
-         return $ Config domain contact url clientID clientSecret authTokenKey certs authorizedEmails
 
 redirectToHttps :: Config -> Handle -> IO ()
 redirectToHttps cf h = do
@@ -134,10 +139,10 @@ redirectToHttps cf h = do
       -- something fancier.
       BL.hPutStr h $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ cfURL cf)] ""
 
-serve :: Config -> Handle -> IO ()
-serve cf h = do
+serve :: Config -> Certificates -> Handle -> IO ()
+serve cf certificates h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
-  let params = TLS.defaultParamsServer { TLS.pCertificates = cfCertificates cf
+  let params = TLS.defaultParamsServer { TLS.pCertificates = certificates
                                        , TLS.pCiphers = TLS.ciphersuite_all
                                        , TLS.pUseSecureRenegotiation = True
                                        }
