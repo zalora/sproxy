@@ -150,9 +150,9 @@ serve cf h = do
          -- TODO: Clean this up. The logic is really messy.
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
-           (Just request@(_, url, headers, _), rest) -> do
+           (Just request@(method, url, headers, _), rest) -> do
              -- TODO: Don't loop for more input on Connection: close header.
-             log $ show request
+             log $ show (method, url, headers)
              -- Check if this is an authorization response.
              case URI.parseURIReference $ BU.toString url of
                Nothing -> internalServerError c "Failed to parse request URI" >> serve' c rest
