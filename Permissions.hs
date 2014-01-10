@@ -24,8 +24,7 @@ instance FromJSON Permissions where
       where
         create :: [User] -> [Group] -> [UrlPattern] -> Parser Permissions
         create users groups urlPatterns = do
-            let userGroupMap = fromList $ fmap (\ (User e gs) -> (e, gs)) users
-                groupUrlPatternMap = fromList $ fmap (\ (Group n ss) -> (n, ss)) groups
+            let groupUrlPatternMap = fromList $ fmap (\ (Group n ss) -> (n, ss)) groups
                 urlPatternDomainMap = fromList $ fmap (\ (UrlPattern n ds) -> (n, ds)) urlPatterns
             Permissions <$> fromList <$>
                 forM users (\ (User e gs) ->

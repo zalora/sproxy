@@ -6,15 +6,11 @@ import Cookies
 import HTTP
 import Permissions
 
-import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
 import Control.Exception (finally, bracketOnError, handle, throw, SomeException)
-import Control.Monad (forever, mzero, join, liftM, when)
-import Control.Monad.Error (runErrorT)
-import Control.Monad.Trans (liftIO)
+import Control.Monad (forever, mzero, liftM, when)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.Aeson as Aeson
-import Data.Aeson (parseJSON)
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BLU
@@ -31,7 +27,7 @@ import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
 import Options.Applicative
-import System.IO (Handle, stdin, hClose, openFile, IOMode (ReadMode))
+import System.IO (Handle, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
 import Data.Yaml
@@ -39,7 +35,8 @@ import Data.String.Conversions
 
 import Prelude hiding (log)
 
--- These are JSON responses that come from Google.
+-- * These are JSON responses that come from Google.
+
 data AccessToken = AccessToken {accessToken :: String, expiresIn :: Integer, tokenType :: String}
 instance Aeson.FromJSON AccessToken where
   parseJSON (Aeson.Object v) = AccessToken <$>
@@ -53,6 +50,9 @@ instance Aeson.FromJSON UserInfo where
   parseJSON (Aeson.Object v) = UserInfo <$>
                                v Aeson..: "email"
   parseJSON _ = mzero
+
+
+-- * configuration
 
 data Config = Config { cfDomain :: String
                      , cfContact :: String
@@ -82,6 +82,8 @@ instance FromJSON Config where
     parseJSON _ = mzero
 
 
+-- * ssl stuff
+
 type Certificates = [(X509, Maybe TLS.PrivateKey)]
 
 loadSSLCertificates :: Config -> IO Certificates
@@ -92,6 +94,7 @@ loadSSLCertificates config = do
     return $ (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
 
 
+-- * command line options
 
 data SProxyApp = SProxyApp {
   appConfigFile :: FilePath
@@ -107,6 +110,11 @@ main = execParser opts >>= runWithOptions
     opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
 
 
+-- * main functionality
+
+
+-- | Reads the configuration file and the ssl certificate files and starts
+-- the server
 runWithOptions :: SProxyApp -> IO ()
 runWithOptions opts = do
   -- Make sure we have all necessary config options. Read them from the given
@@ -140,6 +148,11 @@ redirectToHttps cf h = do
       -- something fancier.
       BL.hPutStr h $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ cfURL cf)] ""
 
+-- | Actual server:
+-- - ssl handshake
+-- - google authentication
+-- - our authorization
+-- - redirecting requests to localhost:8080
 serve :: Config -> Certificates -> Handle -> IO ()
 serve cf certificates h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
