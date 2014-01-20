@@ -15,15 +15,12 @@ From that point on, when sproxy detects a valid `gauth` cookie it extracts the e
 
 ## Configuration File
 
-The configuration is read on stdin. For example:
-
 ```
-sproxy < example.conf
+sproxy --config example.conf
 ```
 
 See the included `example.config`
 
 ## TODO
 
- * Allow more than 1 redirect URL.
  * Allow more complex access rules.
