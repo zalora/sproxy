@@ -17,6 +17,7 @@ import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Certificate.X509 (X509)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
+import Data.Maybe
 import Network (PortID(..), listenOn, connectTo, accept)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
@@ -56,7 +57,7 @@ instance Aeson.FromJSON UserInfo where
 
 data Config = Config { cfDomain :: String
                      , cfContact :: String
-                     , cfURL :: String
+                     , cfURLs :: [String]
                      , cfClientID :: String
                      , cfClientSecret :: String
                      , cfAuthTokenKey :: String
@@ -71,7 +72,7 @@ instance FromJSON Config where
     parseJSON o@(Object m) = Config <$>
         m .: "domain" <*>
         m .: "contact" <*>
-        m .: "url" <*>
+        m .: "urls" <*>
         m .: "client_id" <*>
         m .: "client_secret" <*>
         m .: "auth_token_key" <*>
@@ -80,6 +81,26 @@ instance FromJSON Config where
         m .: "ssl_extra_certs" <*>
         parseJSON o
     parseJSON _ = mzero
+
+
+-- | Returns (Just redirectUri) for a given request.
+-- Returns Nothing, if the uri does not exist.
+mkRedirectURI :: Config -> Request -> Maybe String
+mkRedirectURI config (method, path, headers, body) =
+    let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
+        redirectUri = URI.URI "https:" (Just (URI.URIAuth "" (cs host) ""))
+            -- For now, we strip the query from the path.
+            -- Google also does not allow to redirect to subpaths when they 
+            -- are not explicitly configured so we
+            -- could/should probably disregard the whole path. (?)
+            (takeWhile (/= '?') $ cs path)
+            "" ""
+        -- just protocol://host/ without path, etc.
+        baseUri = show redirectUri{URI.uriPath = "/"}
+        isAllowedUri = baseUri `elem` cfURLs config
+    in if isAllowedUri
+        then Just $ show redirectUri
+        else Nothing
 
 
 -- * ssl stuff
@@ -137,16 +158,18 @@ runWithOptions opts = do
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
 
+-- | Redirects requests to https.
 redirectToHttps :: Config -> Handle -> IO ()
 redirectToHttps cf h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
-    (Just _, _) -> do
-      -- For now, don't even try to intelligently redirect the request,
-      -- just send them to the URL from the config. Maybe later we can do
-      -- something fancier.
-      BL.hPutStr h $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ cfURL cf)] ""
+    (Just request, _) -> do
+      BL.hPutStr h $ rawResponse $ case mkRedirectURI cf request of
+        Nothing ->
+            response 404 "Not Found" [] "404 - Not Found"
+        Just redirectUri ->
+            response 302 "Found" [("Location", cs redirectUri)] ""
 
 -- | Actual server:
 -- - ssl handshake
@@ -172,47 +195,54 @@ serve cf certificates h = do
            (Just request@(method, url, headers, _), rest) -> do
              -- TODO: Don't loop for more input on Connection: close header.
              log $ show (method, url, headers)
-             -- Check if this is an authorization response.
-             case URI.parseURIReference $ BU.toString url of
-               Nothing -> internalServerError c "Failed to parse request URI" >> serve' c rest
-               Just uri -> do
-                 let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
-                 -- This isn't a perfect test, but it's perfect for testing.
-                 case (lookup "state" query, lookup "code" query) of
-                   (Just (Just _), Just (Just code)) -> do
-                     tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ cfClientSecret cf, "redirect_uri=" ++ cfURL cf, "grant_type=authorization_code"]
-                     case tokenRes of
-                       Left err -> internalServerError c err >> serve' c rest
-                       Right resp -> do
-                         case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
-                           Nothing -> internalServerError c "Received an invalid response from Google's authentication server." >> serve' c rest
-                           Just token -> do
-                             infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
-                             case infoRes of
-                               Left err -> internalServerError c err >> serve' c rest
-                               Right info -> do
-                                 case Aeson.decode $ BLU.fromString $ Curl.respBody info of
-                                   Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
-                                   Just userInfo -> do
-                                     clientToken <- authToken (cfAuthTokenKey cf) (userEmail userInfo)
-                                     let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
-                                         resp' = response 302 "Found" [("Location", BU.fromString $ cfURL cf), ("Set-Cookie", BU.fromString cookie)] ""
-                                     TLS.sendData c $ rawResponse resp'
-                                     serve' c rest
-                   _ -> do
-                     -- Check for an auth cookie.
-                     let (_, cookies) = processCookieHeaders (cfDomain cf) headers
-                     case find (\x -> HTTP.ckName x == "gauth") cookies of
-                       Nothing -> redirectForAuth c >> serve' c rest
-                       Just authCookie -> do
-                         auth <- validAuth (cfAuthTokenKey cf) (HTTP.ckValue authCookie)
-                         case auth of
-                           Nothing -> redirectForAuth c >> serve' c rest
-                           Just token -> do
-                             continue <- requestWithEmail c request (cfPermissions cf) (authEmail token) (cfContact cf)
-                             when continue $ serve' c rest
-       redirectForAuth c = do
-         let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ cfURL cf ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
+             case mkRedirectURI cf request of
+               Nothing -> do
+                 -- uri does not exist -> 404
+                 TLS.sendData c $ rawResponse $ response 404 "Not Found" [] "404 - Not Found"
+                 serve' c rest
+               Just redirectUri ->
+                 -- Check if this is an authorization response.
+                 case URI.parseURIReference $ BU.toString url of
+                   Nothing -> internalServerError c "Failed to parse request URI" >> serve' c rest
+                   Just uri -> do
+                     let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
+                     -- This isn't a perfect test, but it's perfect for testing.
+                     case (lookup "state" query, lookup "code" query) of
+                       (Just (Just _), Just (Just code)) -> do
+                         tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ cfClientSecret cf, "redirect_uri=" ++ redirectUri, "grant_type=authorization_code"]
+                         case tokenRes of
+                           Left err -> internalServerError c err >> serve' c rest
+                           Right resp -> do
+                             case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
+                               Nothing -> do
+                                  internalServerError c "Received an invalid response from Google's authentication server." >> serve' c rest
+                               Just token -> do
+                                 infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
+                                 case infoRes of
+                                   Left err -> internalServerError c err >> serve' c rest
+                                   Right info -> do
+                                     case Aeson.decode $ BLU.fromString $ Curl.respBody info of
+                                       Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
+                                       Just userInfo -> do
+                                         clientToken <- authToken (cfAuthTokenKey cf) (userEmail userInfo)
+                                         let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
+                                             resp' = response 302 "Found" [("Location", cs redirectUri), ("Set-Cookie", BU.fromString cookie)] ""
+                                         TLS.sendData c $ rawResponse resp'
+                                         serve' c rest
+                       _ -> do
+                         -- Check for an auth cookie.
+                         let (_, cookies) = processCookieHeaders (cfDomain cf) headers
+                         case find (\x -> HTTP.ckName x == "gauth") cookies of
+                           Nothing -> redirectForAuth c redirectUri >> serve' c rest
+                           Just authCookie -> do
+                             auth <- validAuth (cfAuthTokenKey cf) (HTTP.ckValue authCookie)
+                             case auth of
+                               Nothing -> redirectForAuth c redirectUri >> serve' c rest
+                               Just token -> do
+                                 continue <- requestWithEmail c request (cfPermissions cf) (authEmail token) (cfContact cf)
+                                 when continue $ serve' c rest
+       redirectForAuth c redirectUri = do
+         let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ redirectUri ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
