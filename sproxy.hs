@@ -18,6 +18,7 @@ import Data.Certificate.X509 (X509)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
 import Data.Maybe
+import Data.Map as Map (fromList, toList, insert)
 import Network (PortID(..), listenOn, connectTo, accept)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
@@ -253,11 +254,12 @@ requestWithEmail c (method, url, headers, body) permissions email _ =
             -- TODO: Make the backend address configurable.
             -- TODO: Reuse connections to the backend server.
             h <- connectTo "127.0.0.1" $ PortNumber 8080
-            let addedHeaders = 
-                    ("From", BU.fromString email) :
-                    ("Groups", cs $ unwords groups) :
-                    []
-            BL.hPutStr h $ rawRequest (method, url, headers ++ addedHeaders, body)
+            let downStreamHeaders =
+                    toList $
+                    insert "From" (BU.fromString email) $
+                    insert "Groups" (cs $ unwords groups) $
+                    fromList headers
+            BL.hPutStr h $ rawRequest (method, url, downStreamHeaders, body)
             input <- BL.hGetContents h
             continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
