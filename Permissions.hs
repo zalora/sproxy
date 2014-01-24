@@ -13,7 +13,8 @@ import Prelude hiding (lookup)
 
 
 data Permissions =
-    Permissions (Map String [String]) -- maps from user emails to allowed domains
+    Permissions
+        (Map String ([String], [String])) -- maps from user emails to groups and allowed domains
   deriving (Show)
 
 instance FromJSON Permissions where
@@ -26,9 +27,9 @@ instance FromJSON Permissions where
         create users groups urlPatterns = do
             let groupUrlPatternMap = fromList $ fmap (\ (Group n ss) -> (n, ss)) groups
                 urlPatternDomainMap = fromList $ fmap (\ (UrlPattern n ds) -> (n, ds)) urlPatterns
-            Permissions <$> fromList <$>
+            userGroupsDomainMap <- fromList <$>
                 forM users (\ (User e gs) ->
-                    (e,) <$> concat <$>
+                    (\ domains -> (e, (gs, domains))) <$> concat <$>
                     forM gs (\ groupName ->
                         case lookup groupName groupUrlPatternMap of
                             Nothing -> fail ("missing group in config: " ++ groupName)
@@ -37,6 +38,7 @@ instance FromJSON Permissions where
                                     case lookup urlPatternName urlPatternDomainMap of
                                         Nothing -> fail ("missing url-pattern in config: " ++ urlPatternName)
                                         Just domains -> return domains)))
+            return $ Permissions userGroupsDomainMap
 
     parseJSON _ = mzero
 
@@ -80,17 +82,17 @@ instance FromJSON UrlPattern where
 
 -- | Checks if a user (given by email) is authorized for a given host.
 -- (Right ()) means authorized.
-isAuthorized :: Permissions -> String -> Maybe String -> String -> Either String ()
+isAuthorized :: Permissions -> String -> Maybe String -> String -> Either String [String]
 isAuthorized (Permissions permissions) email (Just host) url =
     if headMay url /= Just '/' then
         -- we discard any url that is not a normal absolute path for security reasons
         Left ("only absolute paths allowed: " ++ url)
     else case lookup email permissions of
         Nothing -> fail ("email not found: " ++ email)
-        Just domains -> if not (host `elem` domains) then
+        Just (groups, domains) -> if not (host `elem` domains) then
             Left (printf "user %s is not authorized to access %s" email host)
           else
             -- authorization successful
-            Right ()
+            Right groups
 isAuthorized _ _ Nothing _ =
     Left "no Host header set"

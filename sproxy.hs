@@ -249,11 +249,15 @@ serve cf certificates h = do
 requestWithEmail :: TLS.Context -> Request -> Permissions -> String -> String -> IO (Bool)
 requestWithEmail c (method, url, headers, body) permissions email _ =
     case isAuthorized permissions email (fmap cs $ lookup "Host" headers) (cs url) of
-        Right () -> do
+        Right groups -> do
             -- TODO: Make the backend address configurable.
             -- TODO: Reuse connections to the backend server.
             h <- connectTo "127.0.0.1" $ PortNumber 8080
-            BL.hPutStr h $ rawRequest (method, url, headers ++ [("From", BU.fromString email)], body)
+            let addedHeaders = 
+                    ("From", BU.fromString email) :
+                    ("Groups", cs $ unwords groups) :
+                    []
+            BL.hPutStr h $ rawRequest (method, url, headers ++ addedHeaders, body)
             input <- BL.hGetContents h
             continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
