@@ -21,6 +21,6 @@ in
   lib.overrideDerivation (haskellPackages.callPackage cabalExpr {
     tls = pkgs.haskellPackages.tls_1_1_x;
   }) (self: {
-    version = self.version + versionSuffix;
+    name = self.name + versionSuffix;
     inherit src;
   })
