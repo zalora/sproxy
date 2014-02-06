@@ -19,7 +19,7 @@ let
     else "pre-${src.shortRev or "git"}";
 in
   lib.overrideDerivation (haskellPackages.callPackage cabalExpr {
-    tls = pkgs.haskellPackages.tls_1_1_x;
+    tls = pkgs.haskellPackages.tls_1_1_5;
   }) (self: {
     name = self.name + versionSuffix;
     inherit src;
