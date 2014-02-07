@@ -1,4 +1,4 @@
-args@{ nixpkgs, src, zalora-nix-lib }:
+{ src }:
 {
-  build = import (src + "/default.nix") args;
+  build = import (src + "/default.nix") { inherit src; };
 }
