@@ -1,5 +1,5 @@
 name:                sproxy
-version:             0.3.0
+version:             0.4.0
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -26,6 +26,7 @@ executable sproxy
                        containers >= 0.5,
                        crypto-random,
                        curl,
+                       data-default,
                        hslogger,
                        HTTP >= 4000.2,
                        http-types,
@@ -42,11 +43,11 @@ executable sproxy
                        -- least not the way that HsOpenSSL uses it in
                        -- my testing (segfaults), so I'm using the
                        -- Haskell-native tls library instead.
-                       tls,
-                       tls-extra,
+                       tls >= 1.2,
                        unordered-containers,
                        unix,
                        utf8-string,
+                       x509,
                        yaml >= 0.8
   default-extensions:  OverloadedStrings
   default-language:    Haskell2010

@@ -14,11 +14,14 @@ import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BLU
-import Data.Certificate.X509 (X509)
+import Data.Default (def)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
 import Data.Maybe
 import Data.Map as Map (fromList, toList, insert)
+import Data.String.Conversions
+import qualified Data.X509 as X509
+import Data.Yaml
 import Network (PortID(..), listenOn, connectTo, accept)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
@@ -32,8 +35,6 @@ import Options.Applicative
 import System.IO (Handle, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
-import Data.Yaml
-import Data.String.Conversions
 
 import Prelude hiding (log)
 
@@ -60,15 +61,15 @@ data Config = Config { cfDomain :: String
                      , cfContact :: String
                      , cfURLs :: [String]
                      , cfClientID :: String
-                     , cfClientSecret :: String
-                     , cfAuthTokenKey :: String
+                     , cfClientSecretFile :: FilePath
+                     , cfAuthTokenKeyFile :: FilePath
                      , cfSslKey :: FilePath
-                     , cfSslCert :: FilePath
-                     , cfSslExtraCerts :: [FilePath]
+                     , cfSslCerts :: FilePath
                      , cfPermissions :: Permissions
                      }
   deriving Show
 
+-- The configuration file is YAML, but the YAML library uses JSON instances.
 instance FromJSON Config where
     parseJSON o@(Object m) = Config <$>
         m .: "domain" <*>
@@ -78,8 +79,7 @@ instance FromJSON Config where
         m .: "client_secret" <*>
         m .: "auth_token_key" <*>
         m .: "ssl_key" <*>
-        m .: "ssl_cert" <*>
-        m .: "ssl_extra_certs" <*>
+        m .: "ssl_certs" <*>
         parseJSON o
     parseJSON _ = mzero
 
@@ -102,19 +102,6 @@ mkRedirectURI config (method, path, headers, body) =
     in if isAllowedUri
         then Just $ show redirectUri
         else Nothing
-
-
--- * ssl stuff
-
-type Certificates = [(X509, Maybe TLS.PrivateKey)]
-
-loadSSLCertificates :: Config -> IO Certificates
-loadSSLCertificates config = do
-    sslKey <- TLS.fileReadPrivateKey (cfSslKey config)
-    sslCert <- TLS.fileReadCertificate (cfSslCert config)
-    sslExtraCerts <- mapM TLS.fileReadCertificate (cfSslExtraCerts config)
-    return $ (sslCert, Just sslKey) : (map (\x -> (x, Nothing)) sslExtraCerts)
-
 
 -- * command line options
 
@@ -148,16 +135,22 @@ runWithOptions opts = do
     Left err -> log $ ("error parsing configuration file " ++
         appConfigFile opts ++ ": " ++ show err)
     Right config -> do
-      certificates <- loadSSLCertificates config
+      clientSecret <- readFile (cfClientSecretFile config)
+      authTokenKey <- readFile (cfAuthTokenKeyFile config)
+      credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts config) (cfSslKey config)
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
       wait <- newEmptyMVar
-      forkIO (handle handleError (listen (PortNumber 443) (serve config certificates)) `finally` (putMVar wait ()))
+      forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey))
+                                  `finally` (putMVar wait ()))
       -- Listen on port 80 just to redirect everything to HTTPS.
       forkIO (handle handleError (listen (PortNumber 80) (redirectToHttps config)))
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
+       -- Usually combined certs are in server, intermediate order,
+       -- but the tls library expects them in the opposite order.
+       reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
 -- | Redirects requests to https.
 redirectToHttps :: Config -> Handle -> IO ()
@@ -177,14 +170,14 @@ redirectToHttps cf h = do
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> Certificates -> Handle -> IO ()
-serve cf certificates h = do
+serve :: Config -> TLS.Credential -> String -> String -> Handle -> IO ()
+serve cf credential clientSecret authTokenKey h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
-  let params = TLS.defaultParamsServer { TLS.pCertificates = certificates
-                                       , TLS.pCiphers = TLS.ciphersuite_all
-                                       , TLS.pUseSecureRenegotiation = True
-                                       }
-  ctx <- TLS.contextNewOnHandle h params rng
+  -- TODO: Work in the intermediate certificates.
+  let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [credential] }
+                   , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS11, TLS.TLS12]
+                                               , TLS.supportedCiphers = TLS.ciphersuite_all } }
+  ctx <- TLS.contextNew h params rng
   TLS.handshake ctx
   input <- tlsGetContents ctx
   serve' ctx input
@@ -210,7 +203,7 @@ serve cf certificates h = do
                      -- This isn't a perfect test, but it's perfect for testing.
                      case (lookup "state" query, lookup "code" query) of
                        (Just (Just _), Just (Just code)) -> do
-                         tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ cfClientSecret cf, "redirect_uri=" ++ redirectUri, "grant_type=authorization_code"]
+                         tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ redirectUri, "grant_type=authorization_code"]
                          case tokenRes of
                            Left err -> internalServerError c err >> serve' c rest
                            Right resp -> do
@@ -225,7 +218,7 @@ serve cf certificates h = do
                                      case Aeson.decode $ BLU.fromString $ Curl.respBody info of
                                        Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
                                        Just userInfo -> do
-                                         clientToken <- authToken (cfAuthTokenKey cf) (userEmail userInfo)
+                                         clientToken <- authToken authTokenKey (userEmail userInfo)
                                          let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
                                              resp' = response 302 "Found" [("Location", cs redirectUri), ("Set-Cookie", BU.fromString cookie)] ""
                                          TLS.sendData c $ rawResponse resp'
@@ -236,7 +229,7 @@ serve cf certificates h = do
                          case find (\x -> HTTP.ckName x == "gauth") cookies of
                            Nothing -> redirectForAuth c redirectUri >> serve' c rest
                            Just authCookie -> do
-                             auth <- validAuth (cfAuthTokenKey cf) (HTTP.ckValue authCookie)
+                             auth <- validAuth authTokenKey (HTTP.ckValue authCookie)
                              case auth of
                                Nothing -> redirectForAuth c redirectUri >> serve' c rest
                                Just token -> do
