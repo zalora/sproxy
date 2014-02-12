@@ -52,7 +52,7 @@ in {
     services.sproxy.config = ''
       client_secret_file: ${cfg.clientSecretFile}
       auth_token_key_file: ${cfg.authTokenKeyFile}
-      ssl_key: ${sslKey}
+      ssl_key: ${cfg.sslKey}
     '';
 
     systemd.services.sproxy = {
