@@ -1,30 +1,32 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables #-}
 
 module Main where
 
 import Cookies
 import HTTP
-import Permissions
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
-import Control.Exception (finally, bracketOnError, handle, throw, SomeException)
+import Control.Exception (finally, bracket, bracketOnError, handle, throw, SomeException)
 import Control.Monad (forever, mzero, liftM, when)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Default (def)
-import Data.List (find)
+import Data.List (find, intercalate)
 import Data.Time.Clock (getCurrentTime)
 import Data.Maybe
 import Data.Map as Map (fromList, toList, insert)
-import Data.String.Conversions
+import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
+import qualified Database.PostgreSQL.Simple as PSQL
 import Network (PortID(..), listenOn, connectTo, accept)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
+import Network.HTTP.Types.Method (Method)
 import qualified Network.HTTP.Types.URI as Query
 import qualified Network.BSD as BSD
 import qualified Network.Socket as Socket
@@ -35,6 +37,7 @@ import Options.Applicative
 import System.IO (Handle, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
+import Text.InterpolatedString.Perl6 (q)
 
 import Prelude hiding (log)
 
@@ -65,13 +68,13 @@ data Config = Config { cfDomain :: String
                      , cfAuthTokenKeyFile :: FilePath
                      , cfSslKey :: FilePath
                      , cfSslCerts :: FilePath
-                     , cfPermissions :: Permissions
+                     , cfDatabase :: String
                      }
   deriving Show
 
 -- The configuration file is YAML, but the YAML library uses JSON instances.
 instance FromJSON Config where
-    parseJSON o@(Object m) = Config <$>
+    parseJSON (Object m) = Config <$>
         m .: "domain" <*>
         m .: "contact" <*>
         m .: "urls" <*>
@@ -80,9 +83,8 @@ instance FromJSON Config where
         m .: "auth_token_key" <*>
         m .: "ssl_key" <*>
         m .: "ssl_certs" <*>
-        parseJSON o
+        m .: "database"
     parseJSON _ = mzero
-
 
 -- | Returns (Just redirectUri) for a given request.
 -- Returns Nothing, if the uri does not exist.
@@ -175,14 +177,18 @@ serve cf credential clientSecret authTokenKey h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [credential] }
-                   , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS11, TLS.TLS12]
+                   , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS10, TLS.TLS11, TLS.TLS12]
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
   ctx <- TLS.contextNew h params rng
   TLS.handshake ctx
   input <- tlsGetContents ctx
-  serve' ctx input
+  -- Establish a DB connection (used for authorization checks).
+  bracket
+    (PSQL.connectPostgreSQL (cs $ cfDatabase cf))
+    (PSQL.close)
+    (\db -> serve' ctx db input)
   TLS.bye ctx
- where serve' c input =
+ where serve' c db input =
          -- TODO: Clean this up. The logic is really messy.
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
@@ -193,11 +199,11 @@ serve cf credential clientSecret authTokenKey h = do
                Nothing -> do
                  -- uri does not exist -> 404
                  TLS.sendData c $ rawResponse $ response 404 "Not Found" [] "404 - Not Found"
-                 serve' c rest
+                 serve' c db rest
                Just redirectUri ->
                  -- Check if this is an authorization response.
                  case URI.parseURIReference $ BU.toString url of
-                   Nothing -> internalServerError c "Failed to parse request URI" >> serve' c rest
+                   Nothing -> internalServerError c "Failed to parse request URI" >> serve' c db rest
                    Just uri -> do
                      let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
                      -- This isn't a perfect test, but it's perfect for testing.
@@ -205,52 +211,58 @@ serve cf credential clientSecret authTokenKey h = do
                        (Just (Just _), Just (Just code)) -> do
                          tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ redirectUri, "grant_type=authorization_code"]
                          case tokenRes of
-                           Left err -> internalServerError c err >> serve' c rest
+                           Left err -> internalServerError c err >> serve' c db rest
                            Right resp -> do
                              case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
                                Nothing -> do
-                                  internalServerError c "Received an invalid response from Google's authentication server." >> serve' c rest
+                                  internalServerError c "Received an invalid response from Google's authentication server." >> serve' c db rest
                                Just token -> do
                                  infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
                                  case infoRes of
-                                   Left err -> internalServerError c err >> serve' c rest
+                                   Left err -> internalServerError c err >> serve' c db rest
                                    Right info -> do
                                      case Aeson.decode $ BLU.fromString $ Curl.respBody info of
-                                       Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c rest
+                                       Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
                                        Just userInfo -> do
                                          clientToken <- authToken authTokenKey (userEmail userInfo)
                                          let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
                                              resp' = response 302 "Found" [("Location", cs redirectUri), ("Set-Cookie", BU.fromString cookie)] ""
                                          TLS.sendData c $ rawResponse resp'
-                                         serve' c rest
+                                         serve' c db rest
                        _ -> do
                          -- Check for an auth cookie.
                          let (_, cookies) = processCookieHeaders (cfDomain cf) headers
                          case find (\x -> HTTP.ckName x == "gauth") cookies of
-                           Nothing -> redirectForAuth c redirectUri >> serve' c rest
+                           Nothing -> redirectForAuth c redirectUri >> serve' c db rest
                            Just authCookie -> do
                              auth <- validAuth authTokenKey (HTTP.ckValue authCookie)
                              case auth of
-                               Nothing -> redirectForAuth c redirectUri >> serve' c rest
+                               Nothing -> redirectForAuth c redirectUri >> serve' c db rest
                                Just token -> do
-                                 continue <- requestWithEmail c request (cfPermissions cf) (authEmail token) (cfContact cf)
-                                 when continue $ serve' c rest
+                                 continue <- requestWithEmail c db request (authEmail token) (cfContact cf)
+                                 when continue $ serve' c db rest
        redirectForAuth c redirectUri = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ redirectUri ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-requestWithEmail :: TLS.Context -> Request -> Permissions -> String -> String -> IO (Bool)
-requestWithEmail c (method, url, headers, body) permissions email _ =
-    case isAuthorized permissions email (fmap cs $ lookup "Host" headers) (cs url) of
-        Right groups -> do
+requestWithEmail :: TLS.Context -> PSQL.Connection -> Request -> String -> String -> IO (Bool)
+requestWithEmail c db (method, url, headers, body) email _ = do
+    groups <- authorizedGroups db email ((maybe "" cs $ lookup "Host" headers) `BS.append` url) method
+    case groups of
+        [] -> do
+            -- TODO: Send back a page that allows the user to request authorization.
+            TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
+            return True
+        _ -> do
             -- TODO: Make the backend address configurable.
             -- TODO: Reuse connections to the backend server.
             h <- connectTo "127.0.0.1" $ PortNumber 8080
             let downStreamHeaders =
                     toList $
                     insert "From" (BU.fromString email) $
-                    insert "Groups" (cs $ unwords groups) $
+                    insert "Groups" (cs $ unwords groups) $ -- deprecated
+                    insert "X-Groups" (cs $ intercalate "," groups) $
                     fromList headers
             BL.hPutStr h $ rawRequest (method, url, downStreamHeaders, body)
             input <- BL.hGetContents h
@@ -261,11 +273,20 @@ requestWithEmail c (method, url, headers, body) permissions email _ =
                     return $ lookup "Connection" headers' /= Just "close"
             hClose h
             return continue
-        -- TODO: Send out a page that allows the user to request authorization.
-        Left permissionError -> do
-            log ("authentication failed: " ++ permissionError)
-            TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
-            return True
+
+authorizedGroups :: PSQL.Connection -> String -> URL -> Method -> IO [String]
+authorizedGroups db email url method =
+  (fmap PSQL.fromOnly) `fmap` PSQL.query db [q|
+SELECT gp."group" FROM group_privilege gp
+INNER JOIN group_member gm ON gm."group" = gp."group"
+INNER JOIN "group" g ON gp."group" = g."group"
+WHERE ? LIKE email
+AND privilege IN (
+  SELECT privilege FROM privilege
+  WHERE ? LIKE url AND ? ILIKE "method"
+  ORDER by array_length(regexp_split_to_array(url, '/'), 1) DESC LIMIT 1
+)                  
+|] (email, url, method)
 
 log s = do
   tid <- myThreadId

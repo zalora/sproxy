@@ -15,43 +15,15 @@ From that point on, when sproxy detects a valid `gauth` cookie it extracts the e
 
 ## Permissions system
 
-The current state of the permissions system is as follows:
-
-All permissions (and groups and users) are configured in the sproxy config file. There are three entity types:
-
-- **user** - A user has an email address and belongs to multiple **groups**.
-- **group** - A group has a name and allows access to multiple so-called **url-patterns**.
-- **url-pattern** - A url-pattern has a name and a domain (e.g. `csqa.ds.zalora.com`).
-
-(Here's an example configuration file: https://bitbucket.org/zalorasea/sproxy/src/HEAD/example.config?at=master .)
-
-A user is allowed access to a url when they are in at least one group that contains at least one url-pattern that is identical
-to the domain of the url.
-
-### Roadmap for the Permissions System
-
-The permissions system is not where we want it to be yet. Ideas for improvement:
-
-- Put the configuration for users, groups, etc. in a database.
-- Allow more complex url-patterns. One possible design: Allow url-patterns to be
-  a domain + path (e.g. `csqa.ds.zalora.com/deleteEverything`). Deciding whether a user
-  has access to a url would work like this:
-  
-    - Collect **all** configured url-patterns (regardless of whether the current user 
-      has access to them or not).
-    - Find the longest url pattern, that is a prefix of the url.
-    - If the user is configured to have access to that url-pattern, let him through. Otherwise not.
-
-  This would make it possible to disallow users access to certain subpaths of web services.
-
-- Include the request's HTTP method (GET, POST, etc.) in the url-pattern.
+Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
 
 ## HTTP headers passed to the back-end server:
 
-header    | value
---------- | -----
-`From:`   | visitor's email address
-`Groups:` | all sproxy groups, seperated by spaces
+header      | value
+----------- | -----
+`From:`     | visitor's email address
+`Groups:`   | all sproxy groups, seperated by spaces (deprecated)
+`X-Groups:` | all groups that granted access to this resource, separated by commas
 
 ## Configuration File
 

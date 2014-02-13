@@ -1,4 +1,4 @@
-module HTTP (Request, Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
+module HTTP (URL, Request, Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, decimal)

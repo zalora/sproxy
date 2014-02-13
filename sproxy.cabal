@@ -1,5 +1,5 @@
 name:                sproxy
-version:             0.4.0
+version:             0.5.0
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -30,10 +30,12 @@ executable sproxy
                        hslogger,
                        HTTP >= 4000.2,
                        http-types,
+                       interpolatedstring-perl6,
                        mtl,
                        network,
                        optparse-applicative,
                        parsec,
+                       postgresql-simple,
                        safe,
                        SHA,
                        split,
@@ -51,5 +53,5 @@ executable sproxy
                        yaml >= 0.8
   default-extensions:  OverloadedStrings
   default-language:    Haskell2010
-  other-extensions:    ScopedTypeVariables
+  other-extensions:    ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables
   ghc-options:         -Wall -fno-warn-missing-signatures -fno-warn-type-defaults -fno-warn-unused-do-bind -threaded -O2
