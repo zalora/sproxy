@@ -99,17 +99,17 @@ CREATE TABLE group_privilege (
 --
 -- To get the groups that grant the user access, put that in a subquery:
 --
-SELECT gp."group" FROM group_privilege gp
-INNER JOIN group_member gm ON gm."group" = gp."group"
-INNER JOIN "group" g ON gp."group" = g."group"
-WHERE 'chris.forno@zalora.com' LIKE email
-AND 'redsift.ds.zalora.com' LIKE "domain"
-AND privilege IN (
-  SELECT p.privilege FROM privilege p
-  INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
-  WHERE 'redsift.ds.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
-  ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
-)
+-- SELECT gp."group" FROM group_privilege gp
+-- INNER JOIN group_member gm ON gm."group" = gp."group"
+-- INNER JOIN "group" g ON gp."group" = g."group"
+-- WHERE 'chris.forno@zalora.com' LIKE email
+-- AND 'redsift.ds.zalora.com' LIKE "domain"
+-- AND privilege IN (
+--   SELECT p.privilege FROM privilege p
+--   INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
+--   WHERE 'redsift.ds.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
+--   ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
+-- )
 --
 -- If you just want to know if a user has access or not, you can
 -- change the first line to:
