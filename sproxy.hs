@@ -247,8 +247,8 @@ serve cf credential clientSecret authTokenKey h = do
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 requestWithEmail :: TLS.Context -> PSQL.Connection -> Request -> String -> String -> IO (Bool)
-requestWithEmail c db (method, url, headers, body) email _ = do
-    groups <- authorizedGroups db email ((maybe "" cs $ lookup "Host" headers) `BS.append` url) method
+requestWithEmail c db (method, path, headers, body) email _ = do
+    groups <- authorizedGroups db email (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
@@ -264,7 +264,7 @@ requestWithEmail c db (method, url, headers, body) email _ = do
                     insert "Groups" (cs $ unwords groups) $ -- deprecated
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     fromList headers
-            BL.hPutStr h $ rawRequest (method, url, downStreamHeaders, body)
+            BL.hPutStr h $ rawRequest (method, path, downStreamHeaders, body)
             input <- BL.hGetContents h
             continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
@@ -274,19 +274,21 @@ requestWithEmail c db (method, url, headers, body) email _ = do
             hClose h
             return continue
 
-authorizedGroups :: PSQL.Connection -> String -> URL -> Method -> IO [String]
-authorizedGroups db email url method =
+authorizedGroups :: PSQL.Connection -> String -> BS.ByteString -> BS.ByteString -> Method -> IO [String]
+authorizedGroups db email domain path method =
   (fmap PSQL.fromOnly) `fmap` PSQL.query db [q|
 SELECT gp."group" FROM group_privilege gp
 INNER JOIN group_member gm ON gm."group" = gp."group"
 INNER JOIN "group" g ON gp."group" = g."group"
 WHERE ? LIKE email
+AND ? LIKE "domain"
 AND privilege IN (
-  SELECT privilege FROM privilege
-  WHERE ? LIKE url AND ? ILIKE "method"
-  ORDER by array_length(regexp_split_to_array(url, '/'), 1) DESC LIMIT 1
-)                  
-|] (email, url, method)
+  SELECT p.privilege FROM privilege p
+  INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
+  WHERE ? LIKE pr."domain" AND ? LIKE "path" AND ? ILIKE "method"
+  ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
+)
+|] (email, domain, domain, path, method)
 
 log s = do
   tid <- myThreadId
