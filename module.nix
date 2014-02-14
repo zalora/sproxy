@@ -50,8 +50,8 @@ in {
 
   config = mkIf cfg.enable {
     services.sproxy.config = ''
-      client_secret_file: ${cfg.clientSecretFile}
-      auth_token_key_file: ${cfg.authTokenKeyFile}
+      client_secret: ${cfg.clientSecretFile}
+      auth_token_key: ${cfg.authTokenKeyFile}
       ssl_key: ${cfg.sslKey}
     '';
 
