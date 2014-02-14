@@ -51,10 +51,12 @@ instance Aeson.FromJSON AccessToken where
                                v Aeson..: "token_type"
   parseJSON _ = mzero
 
-data UserInfo = UserInfo {userEmail :: String}
+data UserInfo = UserInfo {userEmail :: String, userGivenName :: String, userFamilyName :: String} deriving (Show)
 instance Aeson.FromJSON UserInfo where
   parseJSON (Aeson.Object v) = UserInfo <$>
-                               v Aeson..: "email"
+                               v Aeson..: "email" <*>
+                               v Aeson..: "given_name" <*>
+                               v Aeson..: "family_name"
   parseJSON _ = mzero
 
 
@@ -224,7 +226,7 @@ serve cf credential clientSecret authTokenKey h = do
                                      case Aeson.decode $ BLU.fromString $ Curl.respBody info of
                                        Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
                                        Just userInfo -> do
-                                         clientToken <- authToken authTokenKey (userEmail userInfo)
+                                         clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                                          let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
                                              resp' = response 302 "Found" [("Location", cs redirectUri), ("Set-Cookie", BU.fromString cookie)] ""
                                          TLS.sendData c $ rawResponse resp'
@@ -239,16 +241,16 @@ serve cf credential clientSecret authTokenKey h = do
                              case auth of
                                Nothing -> redirectForAuth c redirectUri >> serve' c db rest
                                Just token -> do
-                                 continue <- requestWithEmail c db request (authEmail token) (cfContact cf)
+                                 continue <- forwardRequest c db request token
                                  when continue $ serve' c db rest
        redirectForAuth c redirectUri = do
-         let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email&state=%2Fprofile&redirect_uri=" ++ redirectUri ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force"
+         let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2Fprofile&redirect_uri=" ++ redirectUri ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-requestWithEmail :: TLS.Context -> PSQL.Connection -> Request -> String -> String -> IO (Bool)
-requestWithEmail c db (method, path, headers, body) email _ = do
-    groups <- authorizedGroups db email (maybe (error "No Host") cs $ lookup "Host" headers) path method
+forwardRequest :: TLS.Context -> PSQL.Connection -> Request -> AuthToken -> IO (Bool)
+forwardRequest c db (method, path, headers, body) token = do
+    groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
@@ -260,9 +262,11 @@ requestWithEmail c db (method, path, headers, body) email _ = do
             h <- connectTo "127.0.0.1" $ PortNumber 8080
             let downStreamHeaders =
                     toList $
-                    insert "From" (BU.fromString email) $
+                    insert "From" (cs $ authEmail token) $
                     insert "Groups" (cs $ unwords groups) $ -- deprecated
                     insert "X-Groups" (cs $ intercalate "," groups) $
+                    insert "X-Given-Name" (cs $ fst $ authName token) $
+                    insert "X-Family-Name" (cs $ snd $ authName token) $
                     fromList headers
             BL.hPutStr h $ rawRequest (method, path, downStreamHeaders, body)
             input <- BL.hGetContents h

@@ -14,6 +14,7 @@ import Text.Parsec.ByteString (Parser)
 import Text.Read (readMaybe)
 
 data AuthToken = AuthToken { authEmail  :: String
+                           , authName   :: (String, String)
                            , authExpiry :: EpochTime
                            , authDigest :: String -- HMAC hash
                            }
@@ -21,12 +22,14 @@ data AuthToken = AuthToken { authEmail  :: String
 -- Here is the format of the actual cookie we send to the client.
 
 instance Show AuthToken where
-  show a = authEmail a ++ ":" ++ show (authExpiry a) ++ ":" ++ (authDigest a)
+  show a = authEmail a ++ ":" ++ authNameString (authName a) ++ ":" ++
+             show (authExpiry a) ++ ":" ++ (authDigest a)
+    where authNameString (given, family) = given ++ ":" ++ family
 
 instance Read AuthToken where
   readsPrec _ =
     \s -> case splitOn ":" s of
-            [email, expire, digest] -> [(AuthToken email (read expire) digest, "")]
+            [email, given, family, expire, digest] -> [(AuthToken email (given, family) (read expire) digest, "")]
             _ -> []
 
 authShelfLife :: EpochTime
@@ -34,15 +37,17 @@ authShelfLife = 30 * 24 * 60 * 60 -- 30 days
 
 -- | Create an AuthToken with the default expiration time, automatically
 -- calculating the digest.
-authToken :: String -> String -> IO AuthToken
-authToken key email = do
+authToken :: String -> String -> (String, String) -> IO AuthToken
+authToken key email name = do
   now <- epochTime
   let expires = now + authShelfLife
       digest = tokenDigest key AuthToken { authEmail = email
+                                         , authName = name
                                          , authExpiry = expires
                                          , authDigest = ""
                                          }
   return AuthToken { authEmail  = email
+                   , authName = name
                    , authExpiry = expires
                    , authDigest = digest
                    }
