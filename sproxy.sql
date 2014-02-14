@@ -2,7 +2,7 @@
 -- CREATE ROLE sproxy WITH LOGIN;
 -- GRANT SELECT ON ALL TABLES IN SCHEMA public TO sproxy;
 
-CREATE TABLE "group" (
+CREATE TABLE IF NOT EXISTS "group" (
   "group" TEXT NOT NULL PRIMARY KEY
 );
 
@@ -14,7 +14,7 @@ CREATE TABLE "group" (
 -- | regional     |
 -- | SG HQ        |
 
-CREATE TABLE group_member (
+CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   email TEXT NOT NULL,
   PRIMARY KEY ("group", email)
@@ -40,7 +40,7 @@ CREATE TABLE group_member (
 -- Find out which groups a user (email address) belongs to:
 -- SELECT "group" FROM group_member WHERE 'email.address' LIKE email
 
-CREATE TABLE privilege (
+CREATE TABLE IF NOT EXISTS privilege (
   "domain" TEXT NOT NULL,
   privilege TEXT NOT NULL,
   PRIMARY KEY ("domain", privilege)
@@ -53,7 +53,7 @@ CREATE TABLE privilege (
 -- | admin.zalora.com      | list users |
 -- | admin.zalora.com      | add users  |
 
-CREATE TABLE privilege_rule (
+CREATE TABLE IF NOT EXISTS privilege_rule (
   "domain" TEXT NOT NULL,
   privilege TEXT NOT NULL,
   "path" TEXT NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE privilege_rule (
 -- | admin.zalora.com      | list users | /user/%   | GET    |
 -- | admin.zalora.com      | add users  | /users    | POST   |
 
-CREATE TABLE group_privilege (
+CREATE TABLE IF NOT EXISTS group_privilege (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   "domain" TEXT NOT NULL,
   privilege TEXT NOT NULL,
