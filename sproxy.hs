@@ -167,7 +167,7 @@ redirectToHttps cf h = do
         Nothing ->
             response 404 "Not Found" [] "404 - Not Found"
         Just redirectUri ->
-            response 302 "Found" [("Location", cs redirectUri)] ""
+            response 303 "See Other" [("Location", cs redirectUri)] ""
 
 -- | Actual server:
 -- - ssl handshake
