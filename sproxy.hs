@@ -196,7 +196,6 @@ serve cf credential clientSecret authTokenKey h = do
            (Nothing, _) -> return () -- no more requests
            (Just request@(method, url, headers, _), rest) -> do
              -- TODO: Don't loop for more input on Connection: close header.
-             log $ show (method, url, headers)
              case mkRedirectURI cf request of
                Nothing -> do
                  -- uri does not exist -> 404
