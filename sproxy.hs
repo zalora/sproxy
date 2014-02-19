@@ -146,7 +146,7 @@ runWithOptions opts = do
       forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey))
                                   `finally` (putMVar wait ()))
       -- Listen on port 80 just to redirect everything to HTTPS.
-      forkIO (handle handleError (listen (PortNumber 80) (redirectToHttps config)))
+      forkIO (handle handleError (listen (PortNumber 80) redirectToHttps))
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
@@ -155,8 +155,8 @@ runWithOptions opts = do
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
 -- | Redirects requests to https.
-redirectToHttps :: Config -> Handle -> IO ()
-redirectToHttps cf h = do
+redirectToHttps :: Handle -> IO ()
+redirectToHttps h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
