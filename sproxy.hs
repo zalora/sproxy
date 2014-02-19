@@ -62,7 +62,8 @@ instance Aeson.FromJSON UserInfo where
 
 -- * configuration
 
-data Config = Config { cfDomain :: String
+data Config = Config { cfCookieDomain :: String
+                     , cfCookieName :: String
                      , cfContact :: String
                      , cfURLs :: [String]
                      , cfClientID :: String
@@ -77,7 +78,8 @@ data Config = Config { cfDomain :: String
 -- The configuration file is YAML, but the YAML library uses JSON instances.
 instance FromJSON Config where
     parseJSON (Object m) = Config <$>
-        m .: "domain" <*>
+        m .: "cookie_domain" <*>
+        m .: "cookie_name" <*>
         m .: "contact" <*>
         m .: "urls" <*>
         m .: "client_id" <*>
@@ -226,14 +228,14 @@ serve cf credential clientSecret authTokenKey h = do
                                        Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
                                        Just userInfo -> do
                                          clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
-                                         let cookie = setCookie (HTTP.MkCookie (cfDomain cf) "gauth" (show clientToken) Nothing Nothing Nothing) authShelfLife
+                                         let cookie = setCookie (HTTP.MkCookie (cfCookieDomain cf) (cfCookieName cf) (show clientToken) Nothing Nothing Nothing) authShelfLife
                                              resp' = response 302 "Found" [("Location", cs redirectUri), ("Set-Cookie", BU.fromString cookie)] ""
                                          TLS.sendData c $ rawResponse resp'
                                          serve' c db rest
                        _ -> do
                          -- Check for an auth cookie.
-                         let (_, cookies) = processCookieHeaders (cfDomain cf) headers
-                         case find (\x -> HTTP.ckName x == "gauth") cookies of
+                         let (_, cookies) = processCookieHeaders (cfCookieDomain cf) headers
+                         case find (\x -> HTTP.ckName x == (cfCookieName cf)) cookies of
                            Nothing -> redirectForAuth c redirectUri >> serve' c db rest
                            Just authCookie -> do
                              auth <- validAuth authTokenKey (HTTP.ckValue authCookie)
