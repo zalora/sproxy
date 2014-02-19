@@ -256,7 +256,6 @@ forwardRequest c db (method, path, headers, body) token = do
             let downStreamHeaders =
                     toList $
                     insert "From" (cs $ authEmail token) $
-                    insert "Groups" (cs $ unwords groups) $ -- deprecated
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
