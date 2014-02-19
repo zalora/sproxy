@@ -65,7 +65,6 @@ instance Aeson.FromJSON UserInfo where
 data Config = Config { cfCookieDomain :: String
                      , cfCookieName :: String
                      , cfContact :: String
-                     , cfURLs :: [String]
                      , cfClientID :: String
                      , cfClientSecretFile :: FilePath
                      , cfAuthTokenKeyFile :: FilePath
@@ -81,7 +80,6 @@ instance FromJSON Config where
         m .: "cookie_domain" <*>
         m .: "cookie_name" <*>
         m .: "contact" <*>
-        m .: "urls" <*>
         m .: "client_id" <*>
         m .: "client_secret" <*>
         m .: "auth_token_key" <*>
@@ -90,10 +88,9 @@ instance FromJSON Config where
         m .: "database"
     parseJSON _ = mzero
 
--- | Returns (Just redirectUri) for a given request.
--- Returns Nothing, if the uri does not exist.
-mkRedirectURI :: Config -> Request -> Maybe String
-mkRedirectURI config (method, path, headers, body) =
+-- | Returns redirectUri for a given request.
+mkRedirectURI :: Request -> Maybe String
+mkRedirectURI (method, path, headers, body) =
     let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
         redirectUri = URI.URI "https:" (Just (URI.URIAuth "" (cs host) ""))
             -- For now, we strip the query from the path.
@@ -102,12 +99,7 @@ mkRedirectURI config (method, path, headers, body) =
             -- could/should probably disregard the whole path. (?)
             (takeWhile (/= '?') $ cs path)
             "" ""
-        -- just protocol://host/ without path, etc.
-        baseUri = show redirectUri{URI.uriPath = "/"}
-        isAllowedUri = baseUri `elem` cfURLs config
-    in if isAllowedUri
-        then Just $ show redirectUri
-        else Nothing
+    in Just $ show redirectUri
 
 -- * command line options
 
@@ -165,7 +157,7 @@ redirectToHttps cf h = do
   case oneRequest input of
     (Nothing, _) -> return ()
     (Just request, _) -> do
-      BL.hPutStr h $ rawResponse $ case mkRedirectURI cf request of
+      BL.hPutStr h $ rawResponse $ case mkRedirectURI request of
         Nothing ->
             response 404 "Not Found" [] "404 - Not Found"
         Just redirectUri ->
@@ -198,7 +190,7 @@ serve cf credential clientSecret authTokenKey h = do
            (Nothing, _) -> return () -- no more requests
            (Just request@(method, url, headers, _), rest) -> do
              -- TODO: Don't loop for more input on Connection: close header.
-             case mkRedirectURI cf request of
+             case mkRedirectURI request of
                Nothing -> do
                  -- uri does not exist -> 404
                  TLS.sendData c $ rawResponse $ response 404 "Not Found" [] "404 - Not Found"
