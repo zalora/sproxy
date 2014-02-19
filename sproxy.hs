@@ -71,6 +71,8 @@ data Config = Config { cfCookieDomain :: String
                      , cfSslKey :: FilePath
                      , cfSslCerts :: FilePath
                      , cfDatabase :: String
+                     , cfBackendAddress :: String
+                     , cfBackendPort :: Integer
                      }
   deriving Show
 
@@ -85,7 +87,9 @@ instance FromJSON Config where
         m .: "auth_token_key" <*>
         m .: "ssl_key" <*>
         m .: "ssl_certs" <*>
-        m .: "database"
+        m .: "database" <*>
+        m .: "backend_address" <*>
+        m .: "backend_port"
     parseJSON _ = mzero
 
 -- | Returns redirectUri for a given request.
@@ -234,15 +238,15 @@ serve cf credential clientSecret authTokenKey h = do
                              case auth of
                                Nothing -> redirectForAuth c redirectUri >> serve' c db rest
                                Just token -> do
-                                 continue <- forwardRequest c db request token
+                                 continue <- forwardRequest cf c db request token
                                  when continue $ serve' c db rest
        redirectForAuth c redirectUri = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2Fprofile&redirect_uri=" ++ redirectUri ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: TLS.Context -> PSQL.Connection -> Request -> AuthToken -> IO (Bool)
-forwardRequest c db (method, path, headers, body) token = do
+forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> Request -> AuthToken -> IO (Bool)
+forwardRequest cf c db (method, path, headers, body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
         [] -> do
@@ -250,9 +254,8 @@ forwardRequest c db (method, path, headers, body) token = do
             TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
             return True
         _ -> do
-            -- TODO: Make the backend address configurable.
             -- TODO: Reuse connections to the backend server.
-            h <- connectTo "127.0.0.1" $ PortNumber 8080
+            h <- connectTo (cfBackendAddress cf) (PortNumber $ fromIntegral $ cfBackendPort cf)
             let downStreamHeaders =
                     toList $
                     insert "From" (cs $ authEmail token) $
