@@ -1,7 +1,7 @@
 module HTTP (URL, Request, Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
-import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, decimal)
+import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, take, decimal, hexadecimal)
 import Data.Attoparsec.ByteString.Lazy (parse, Result(..))
 import Data.Attoparsec.Combinator (manyTill)
 import qualified Data.ByteString as BS
@@ -9,10 +9,14 @@ import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.CaseInsensitive as CI
+import Data.String.Conversions (cs)
 import Network.HTTP.Types.Header (Header)
 import Network.HTTP.Types.Method (Method)
 import Network.HTTP.Types.Status (Status(..), mkStatus)
+import Numeric (showHex)
 import Text.Read (readMaybe)
+
+import Prelude hiding (take)
 
 type URL = BS.ByteString
 type Body = BL.ByteString
@@ -36,6 +40,13 @@ requestLineP = (,) <$> (takeTill isSpace <* skipSpace) <*> (takeTill isSpace <* 
 responseLineP :: Parser Status
 responseLineP = mkStatus <$> ((takeTill isSpace <* skipSpace) *> (decimal <* skipSpace)) <*> (takeTill isEndOfLine <* endOfLine)
 
+chunkP :: Parser (Int, BS.ByteString)
+chunkP = do
+  length <- hexadecimal
+  extensions <- takeTill isEndOfLine -- Ignore chunked extensions.
+  chunk <- take (length + 4) -- + 4 is to catch the preceeding and trailing \r\n
+  return $ (length, cs (showHex length "") `BS.append` extensions `BS.append` chunk)
+
 oneRequest :: BL.ByteString -> (Maybe Request, BL.ByteString)
 oneRequest s = case parse ((,) <$> requestLineP <*> manyTill headerP endOfLine) s of
                  Fail "" _ _ -> (Nothing, "")
@@ -53,21 +64,26 @@ oneResponse s = case parse ((,) <$> responseLineP <*> manyTill headerP endOfLine
 requestBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
 requestBody hs s =
   case lookup "Content-Length" hs of
-    -- TODO: Support Transfer-Encoding (e.g. chunked).
-    Nothing -> ("", s)
+    Nothing -> case lookup "Transfer-Encoding" hs of
+                 Just "chunked" -> chunkedBody s
+                 _ -> ("", s)
     Just cl -> case readMaybe $ B8.unpack cl of
                  Nothing -> error "Malformed Content-Length header."
                  Just i -> BL.splitAt i s
+ where chunkedBody :: BL.ByteString -> (Body, BL.ByteString)
+       chunkedBody s =
+         case parse chunkP s of
+           Fail rest _ _ -> error "Failed reading chunked transfer encoding."
+           Done rest (0, body) -> (BL.fromStrict body, rest)
+           -- TODO: Support trailing headers.
+           Done rest (length, body) -> let (body', rest') = chunkedBody rest
+                                       in (BL.fromStrict body `BL.append` body', rest')
 
 responseBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
 responseBody hs s =
   case lookup "Connection" hs of
     Just "close" -> (s, "") -- Read up until the end of the string.
-    _ -> case lookup "Content-Length" hs of
-           Nothing -> ("", s)
-           Just cl -> case readMaybe $ B8.unpack cl of
-                        Nothing -> error "Malformed Content-Length header."
-                        Just i -> BL.splitAt i s
+    _ -> requestBody hs s
 
 -- Note that this may not exactly match the original request.
 rawRequest :: Request -> BL.ByteString
