@@ -16,7 +16,7 @@ import Network.HTTP.Types.Status (Status(..), mkStatus)
 import Numeric (showHex)
 import Text.Read (readMaybe)
 
-import Prelude hiding (take)
+import Prelude hiding (length, take)
 
 type URL = BS.ByteString
 type Body = BL.ByteString
@@ -73,11 +73,11 @@ requestBody hs s =
  where chunkedBody :: BL.ByteString -> (Body, BL.ByteString)
        chunkedBody s =
          case parse chunkP s of
-           Fail rest _ _ -> error "Failed reading chunked transfer encoding."
+           Fail _ _ _ -> error "Failed reading chunked transfer encoding."
            Done rest (0, body) -> (BL.fromStrict body, rest)
            -- TODO: Support trailing headers.
-           Done rest (length, body) -> let (body', rest') = chunkedBody rest
-                                       in (BL.fromStrict body `BL.append` body', rest')
+           Done rest (_, body) -> let (body', rest') = chunkedBody rest
+                                  in (BL.fromStrict body `BL.append` body', rest')
 
 responseBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
 responseBody hs s =

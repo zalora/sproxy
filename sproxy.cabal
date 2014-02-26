@@ -1,5 +1,5 @@
 name:                sproxy
-version:             0.7.2
+version:             0.7.3
 -- synopsis:            
 -- description:         
 license:             GPL-3
@@ -54,4 +54,4 @@ executable sproxy
   default-extensions:  OverloadedStrings
   default-language:    Haskell2010
   other-extensions:    ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables
-  ghc-options:         -Wall -fno-warn-missing-signatures -fno-warn-type-defaults -fno-warn-unused-do-bind -threaded -O2
+  ghc-options:         -Wall -fno-warn-missing-signatures -fno-warn-type-defaults -fno-warn-unused-do-bind -fno-warn-name-shadowing -threaded -O2
