@@ -40,8 +40,18 @@ CREATE TABLE IF NOT EXISTS group_member (
 -- Find out which groups a user (email address) belongs to:
 -- SELECT "group" FROM group_member WHERE 'email.address' LIKE email
 
+CREATE TABLE IF NOT EXISTS domain (
+  domain TEXT NOT NULL PRIMARY KEY
+);
+
+-- | domain                |
+-- |-----------------------|
+-- | admin.zalora.com      |
+-- | csqa.zalora.com       |
+-- | redsift.ds.zalora.com |
+
 CREATE TABLE IF NOT EXISTS privilege (
-  "domain" TEXT NOT NULL,
+  "domain" TEXT REFERENCES domain (domain) ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   privilege TEXT NOT NULL,
   PRIMARY KEY ("domain", privilege)
 );
