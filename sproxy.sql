@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 -- AND privilege IN (
 --   SELECT p.privilege FROM privilege p
 --   INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
---   WHERE 'redsift.ds.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
+--   WHERE 'redsift.ds.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method" AND gp.privilege = p.privilege AND gp."domain" = p."domain"
 --   ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
 -- )
 --
