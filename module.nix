@@ -61,6 +61,8 @@ in {
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig.ExecStart = "${cfg.package}/bin/sproxy --config=${configFile}";
+
+      serviceConfig.Restart = "on-failure";
     };
   };
 }
