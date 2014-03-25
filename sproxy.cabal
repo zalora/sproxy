@@ -35,7 +35,6 @@ executable sproxy
                        mtl,
                        network,
                        optparse-applicative,
-                       parsec,
                        postgresql-simple,
                        safe,
                        SHA,
@@ -56,3 +55,42 @@ executable sproxy
   default-language:    Haskell2010
   other-extensions:    ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables
   ghc-options:         -Wall -fno-warn-missing-signatures -fno-warn-type-defaults -fno-warn-unused-do-bind -fno-warn-name-shadowing -threaded -O2
+
+test-suite spec
+  type:                exitcode-stdio-1.0
+  ghc-options:         -Wall -Werror
+  hs-source-dirs:      src, test
+  main-is:             Spec.hs
+  build-depends:       aeson,
+                       attoparsec,
+                       base >=4.6 && <4.7,
+                       bytestring,
+                       case-insensitive,
+                       certificate,
+                       concurrent-extra,
+                       containers >= 0.5,
+                       crypto-random,
+                       curl,
+                       data-default,
+                       hslogger,
+                       HTTP >= 4000.2,
+                       http-types,
+                       interpolatedstring-perl6,
+                       mtl,
+                       network,
+                       optparse-applicative,
+                       postgresql-simple,
+                       safe,
+                       SHA,
+                       split,
+                       string-conversions,
+                       time,
+                       tls >= 1.2,
+                       unordered-containers,
+                       unix,
+                       utf8-string,
+                       x509,
+                       yaml >= 0.8,
+                       hspec >= 1.5
+  default-extensions:  OverloadedStrings
+  default-language:    Haskell2010

@@ -219,7 +219,7 @@ serve cf credential clientSecret authTokenKey h = do
                                      serve' c db rest
                    _ -> do
                      -- Check for an auth cookie.
-                     let (_, cookies) = processCookieHeaders (cfCookieDomain cf) headers
+                     let cookies = parseCookies (cfCookieDomain cf) headers
                      case find (\x -> HTTP.ckName x == (cfCookieName cf)) cookies of
                        Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
                        Just authCookie -> do

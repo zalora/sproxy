@@ -1,17 +1,16 @@
-module Cookies (processCookieHeaders, setCookie, AuthToken(..), authToken, validAuth, authShelfLife) where
+module Cookies (parseCookies, setCookie, AuthToken(..), authToken, validAuth, authShelfLife) where
 
 import           Control.Applicative
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL8
-import Data.Char
+import Data.Char hiding (isSpace)
 import Data.Digest.Pure.SHA (hmacSha1, showDigest)
 import Data.List.Split (splitOn)
-import Network.HTTP.Cookie hiding (processCookieHeaders)
+import Network.HTTP.Cookie
 import Network.HTTP.Types.Header (Header)
 import System.Posix.Time (epochTime)
 import System.Posix.Types (EpochTime)
-import Text.Parsec (char, many1, satisfy, parse, sepBy1)
-import Text.Parsec.ByteString (Parser)
+import Data.Attoparsec.ByteString.Char8
 import Text.Read (readMaybe)
 
 data AuthToken = AuthToken { authEmail  :: String
@@ -71,7 +70,7 @@ validAuth key token = do
         then return $ Just t
         else return Nothing
 
-setCookie :: Cookie -> EpochTime -> [Char]
+setCookie :: Cookie -> EpochTime -> String
 setCookie cookie maxAge =
   ckName cookie ++ "=" ++ ckValue cookie ++
   "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ ckDomain cookie ++ "; HttpOnly; Secure"
@@ -79,21 +78,21 @@ setCookie cookie maxAge =
 -- headerToCookies in Network.HTTP.Cookie is designed to work with the
 -- Set-Cookie header. This is a variant for the Cookie header
 -- (HdrSetCookie -> HdrCookie).
-processCookieHeaders :: String -> [Header] -> ([BS.ByteString], [Cookie])
-processCookieHeaders dom hdrs = foldr (headerToCookies dom) ([],[]) hdrs
+parseCookies :: String -> [Header] -> [Cookie]
+parseCookies dom hdrs = snd $ foldr (headerToCookies dom) ([],[]) hdrs
 
 -- | @headerToCookies dom hdr acc@
 headerToCookies :: String -> Header -> ([BS.ByteString], [Cookie]) -> ([BS.ByteString], [Cookie])
 headerToCookies dom ("Cookie", val) (accErr, accCookie) =
-    case parse cookies "" val of
+    case parseOnly cookies val of
         Left{}  -> (val:accErr, accCookie)
         Right x -> (accErr, x ++ accCookie)
   where
    cookies :: Parser [Cookie]
-   cookies = sepBy1 cookie (char ';' >> spaces_l)
+   cookies = sepBy1 cookie (";" *> spaces_l)
 
    cookie :: Parser Cookie
-   cookie = mkCookie <$> word <*> (spaces_l *> char '=' *> spaces_l *> cvalue)
+   cookie = mkCookie <$> word <*> (spaces_l *> "=" *> spaces_l *> cvalue)
 
    cvalue :: Parser String
 
