@@ -1,12 +1,12 @@
 name:                sproxy
 version:             0.7.3
--- synopsis:            
--- description:         
+-- synopsis:
+-- description:
 license:             GPL-3
 license-file:        LICENSE
 author:              Chris Forno
 maintainer:          jekor@jekor.com
--- copyright:           
+-- copyright:
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10

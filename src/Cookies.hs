@@ -80,9 +80,9 @@ setCookie cookie maxAge =
 processCookieHeaders :: String -> [Header] -> ([BS.ByteString], [Cookie])
 processCookieHeaders dom hdrs = foldr (headerToCookies dom) ([],[]) hdrs
 
--- | @headerToCookies dom hdr acc@ 
+-- | @headerToCookies dom hdr acc@
 headerToCookies :: String -> Header -> ([BS.ByteString], [Cookie]) -> ([BS.ByteString], [Cookie])
-headerToCookies dom ("Cookie", val) (accErr, accCookie) = 
+headerToCookies dom ("Cookie", val) (accErr, accCookie) =
     case parse cookies "" val of
         Left{}  -> (val:accErr, accCookie)
         Right x -> (accErr, x ++ accCookie)
@@ -101,13 +101,13 @@ headerToCookies dom ("Cookie", val) (accErr, accCookie) =
           }
 
    cvalue :: Parser String
-   
+
    spaces_l = many (satisfy isSpace)
 
    cvalue = quotedstring <|> many1 (satisfy $ not . (==';')) <|> return ""
-   
+
    mkCookie :: String -> String -> Cookie
-   mkCookie nm cval = 
+   mkCookie nm cval =
 	  MkCookie { ckName    = nm
                    , ckValue   = cval
                    , ckDomain  = map toLower dom
