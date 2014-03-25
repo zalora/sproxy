@@ -95,13 +95,13 @@ instance FromJSON Config where
 -- https://wiki.zalora.com/Main_Page -> https://wiki.zalora.com/
 -- Note that this always uses https:
 rootURI :: Request -> URI.URI
-rootURI (_, _, headers, _) =
+rootURI (Request _ _ headers _) =
   let host = cs $ fromMaybe (error "Host header not found") $ lookup "Host" headers
   in URI.URI "https:" (Just $ URI.URIAuth "" host "") "/" "" ""
 
 -- Note that this is always used for redirects and hence always uses https:
 requestURI :: Request -> URI.URI
-requestURI (_, path, headers, _) =
+requestURI (Request _ path headers _) =
   let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
   in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
 
@@ -187,7 +187,7 @@ serve cf credential clientSecret authTokenKey h = do
          -- TODO: Clean this up. The logic is really messy.
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
-           (Just request@(_, url, headers, _), rest) -> do
+           (Just request@(Request _ url headers _), rest) -> do
              -- TODO: Don't loop for more input on Connection: close header.
              -- Check if this is an authorization response.
              case URI.parseURIReference $ BU.toString url of
@@ -235,7 +235,7 @@ serve cf credential clientSecret authTokenKey h = do
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> Request -> AuthToken -> IO (Bool)
-forwardRequest cf c db (method, path, headers, body) token = do
+forwardRequest cf c db (Request method path headers body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
         [] -> do
@@ -252,7 +252,7 @@ forwardRequest cf c db (method, path, headers, body) token = do
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
                     fromList headers
-            BL.hPutStr h $ rawRequest (method, path, downStreamHeaders, body)
+            BL.hPutStr h $ rawRequest (Request method path downStreamHeaders body)
             input <- BL.hGetContents h
             continue <- case oneResponse input of
                 (Nothing, _) -> return False -- no more responses
