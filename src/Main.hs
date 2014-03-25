@@ -143,10 +143,10 @@ runWithOptions opts = do
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
       wait <- newEmptyMVar
-      forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey))
+      _ <- forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey))
                                   `finally` (putMVar wait ()))
       -- Listen on port 80 just to redirect everything to HTTPS.
-      forkIO (handle handleError (listen (PortNumber 80) redirectToHttps))
+      _ <- forkIO (handle handleError (listen (PortNumber 80) redirectToHttps))
       takeMVar wait
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
@@ -208,8 +208,8 @@ serve cf credential clientSecret authTokenKey h = do
                              infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
                              case infoRes of
                                Left err -> internalServerError c err >> serve' c db rest
-                               Right info -> do
-                                 case Aeson.decode $ BLU.fromString $ Curl.respBody info of
+                               Right i -> do
+                                 case Aeson.decode $ BLU.fromString $ Curl.respBody i of
                                    Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
                                    Just userInfo -> do
                                      clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
@@ -278,11 +278,13 @@ AND privilege IN (
 )
 |] (email, domain, domain, path, method)
 
+log :: String -> IO ()
 log s = do
   tid <- myThreadId
   t <- getCurrentTime
   Log.debugM "sproxy" $ show tid ++ " " ++ show t ++ ": " ++ s
 
+internalServerError :: TLS.Context -> String -> IO ()
 internalServerError c err = do
   log $ show err
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
@@ -305,10 +307,13 @@ curl url options = Curl.withCurlDo $ do
     then return $ Left $ show (Curl.respCurlCode r) ++ " -- " ++ Curl.respStatusLine r
     else return $ Right r
 
+post :: Curl.URLString -> [String] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 post url fields = curl url $ Curl.CurlPostFields fields : Curl.method_POST
 
+get :: Curl.URLString -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 get url = curl url Curl.method_GET
 
+connect :: Socket.HostName -> Socket.PortNumber -> IO Socket.Socket
 connect host port = do
   proto <- BSD.getProtocolNumber "tcp"
   bracketOnError
@@ -325,6 +330,6 @@ tlsGetContents :: TLS.Context -> IO BL.ByteString
 tlsGetContents ctx = fmap BL.fromChunks lazyRead
  where lazyRead = unsafeInterleaveIO loop
        loop = do
-         c <- TLS.recvData ctx
-         cs <- lazyRead
-         return (c:cs)
+         x <- TLS.recvData ctx
+         xs <- lazyRead
+         return (x:xs)

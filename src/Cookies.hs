@@ -1,5 +1,6 @@
 module Cookies (processCookieHeaders, setCookie, AuthToken(..), authToken, validAuth, authShelfLife) where
 
+import           Control.Applicative
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Char
@@ -9,7 +10,7 @@ import Network.HTTP.Cookie hiding (processCookieHeaders)
 import Network.HTTP.Types.Header (Header)
 import System.Posix.Time (epochTime)
 import System.Posix.Types (EpochTime)
-import Text.Parsec (char, many, many1, satisfy, parse, (<|>), sepBy1)
+import Text.Parsec (char, many1, satisfy, parse, sepBy1)
 import Text.Parsec.ByteString (Parser)
 import Text.Read (readMaybe)
 
@@ -70,6 +71,7 @@ validAuth key token = do
         then return $ Just t
         else return Nothing
 
+setCookie :: Cookie -> EpochTime -> [Char]
 setCookie cookie maxAge =
   ckName cookie ++ "=" ++ ckValue cookie ++
   "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ ckDomain cookie ++ "; HttpOnly; Secure"
@@ -91,14 +93,7 @@ headerToCookies dom ("Cookie", val) (accErr, accCookie) =
    cookies = sepBy1 cookie (char ';' >> spaces_l)
 
    cookie :: Parser Cookie
-   cookie =
-       do { name <- word
-          ; spaces_l
-          ; char '='
-          ; spaces_l
-          ; val1 <- cvalue
-          ; return $ mkCookie name val1
-          }
+   cookie = mkCookie <$> word <*> (spaces_l *> char '=' *> spaces_l *> cvalue)
 
    cvalue :: Parser String
 
@@ -118,11 +113,6 @@ headerToCookies dom ("Cookie", val) (accErr, accCookie) =
 headerToCookies _ _ acc = acc
 
 word, quotedstring :: Parser String
-quotedstring =
-    do { char '"'  -- "
-       ; str <- many (satisfy $ not . (=='"'))
-       ; char '"'
-       ; return str
-       }
+quotedstring = char '"' *> many (satisfy $ not . (=='"')) <* char '"'
 
 word = many1 (satisfy (\x -> isAlphaNum x || x=='_' || x=='.' || x=='-' || x==':'))

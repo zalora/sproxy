@@ -71,8 +71,8 @@ requestBody hs s =
                  Nothing -> error "Malformed Content-Length header."
                  Just i -> BL.splitAt i s
  where chunkedBody :: BL.ByteString -> (Body, BL.ByteString)
-       chunkedBody s =
-         case parse chunkP s of
+       chunkedBody bs =
+         case parse chunkP bs of
            Fail _ _ _ -> error "Failed reading chunked transfer encoding."
            Done rest (0, body) -> (BL.fromStrict body, rest)
            -- TODO: Support trailing headers.
