@@ -13,7 +13,8 @@ cabal-version:       >=1.10
 data-files:          module.nix, sproxy.sql
 
 executable sproxy
-  main-is:             sproxy.hs
+  main-is:             Main.hs
+  hs-source-dirs:      src
   other-modules:       Cookies,
                        HTTP
   build-depends:       aeson,
