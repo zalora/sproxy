@@ -20,10 +20,10 @@ import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Default (def)
-import Data.List (find, intercalate)
+import Data.List (intercalate)
 import Data.Time.Clock (getCurrentTime)
 import Data.Maybe
-import Data.Map as Map (fromList, toList, insert)
+import Data.Map as Map (fromList, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
@@ -31,7 +31,7 @@ import qualified Database.PostgreSQL.Simple as PSQL
 import Network (PortID(..), listenOn, connectTo, accept)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
-import Network.HTTP.Types.Method (Method)
+import Network.HTTP.Types (Method, hCookie)
 import qualified Network.HTTP.Types.URI as Query
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
@@ -216,29 +216,32 @@ serve cf credential clientSecret authTokenKey h = do
                                    Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
                                    Just userInfo -> do
                                      clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
-                                     let cookie = setCookie (HTTP.MkCookie (cfCookieDomain cf) (cfCookieName cf) (show clientToken) Nothing Nothing Nothing) authShelfLife
+                                     let cookie = setCookie (HTTP.MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
                                          resp' = response 302 "Found" [("Location", cs $ show $ rootURI request), ("Set-Cookie", BU.fromString cookie)] ""
                                      TLS.sendData c $ rawResponse resp'
                                      serve' c db rest
                    _ -> do
                      -- Check for an auth cookie.
-                     let cookies = parseCookies (cfCookieDomain cf) headers
-                     case find (\x -> HTTP.ckName x == (cfCookieName cf)) cookies of
+                     case removeCookie cookieName (parseCookies cookieDomain headers) of
                        Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
-                       Just authCookie -> do
+                       Just (authCookie, cookies) -> do
                          auth <- validAuth authTokenKey (HTTP.ckValue authCookie)
                          case auth of
                            Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
                            Just token -> do
-                             continue <- forwardRequest cf c db request token
+                             continue <- forwardRequest cf c db cookies request token
                              when continue $ serve' c db rest
+
+       cookieDomain = cfCookieDomain cf
+       cookieName = cfCookieName cf
+
        redirectForAuth c redirectUri = do
          let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2Fprofile&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> Request -> AuthToken -> IO (Bool)
-forwardRequest cf c db (Request method path headers body) token = do
+forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [Cookie] -> Request -> AuthToken -> IO (Bool)
+forwardRequest cf c db cookies (Request method path headers body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
         [] -> do
@@ -254,6 +257,8 @@ forwardRequest cf c db (Request method path headers body) token = do
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
+                    setCookies $
+                    delete hCookie $
                     fromList headers
             BL.hPutStr h $ rawRequest (Request method path downStreamHeaders body)
             input <- BL.hGetContents h
@@ -264,6 +269,10 @@ forwardRequest cf c db (Request method path headers body) token = do
                     return $ lookup "Connection" headers' /= Just "close"
             hClose h
             return continue
+  where
+    setCookies = case cookies of
+      [] -> id
+      _  -> insert hCookie (formatCookies cookies)
 
 authorizedGroups :: PSQL.Connection -> String -> BS.ByteString -> BS.ByteString -> Method -> IO [String]
 authorizedGroups db email domain path method =

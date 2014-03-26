@@ -1,13 +1,26 @@
-module Cookies (parseCookies, setCookie, AuthToken(..), authToken, validAuth, authShelfLife) where
+module Cookies (
+  Cookie
+, parseCookies
+, removeCookie
+, formatCookies
+, setCookie
+, AuthToken(..)
+, authToken
+, validAuth
+, authShelfLife
+) where
 
+import           Data.Monoid
+import           Data.String
 import           Control.Applicative
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import Data.Char hiding (isSpace)
 import Data.Digest.Pure.SHA (hmacSha1, showDigest)
+import Data.List (partition, intercalate)
 import Data.List.Split (splitOn)
 import Network.HTTP.Cookie
-import Network.HTTP.Types.Header (Header)
+import Network.HTTP.Types.Header (Header, hCookie)
 import System.Posix.Time (epochTime)
 import System.Posix.Types (EpochTime)
 import Data.Attoparsec.ByteString.Char8
@@ -31,6 +44,11 @@ instance Read AuthToken where
     \s -> case splitOn ":" s of
             [email, given, family, expire, digest] -> [(AuthToken email (given, family) (read expire) digest, "")]
             _ -> []
+
+removeCookie :: String -> [Cookie] -> Maybe (Cookie, [Cookie])
+removeCookie name cookies = case partition ((== name) . ckName) cookies of
+  (x:_, xs) -> Just (x, xs)
+  _ -> Nothing
 
 authShelfLife :: EpochTime
 authShelfLife = 30 * 24 * 60 * 60 -- 30 days
@@ -75,6 +93,11 @@ setCookie cookie maxAge =
   ckName cookie ++ "=" ++ ckValue cookie ++
   "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ ckDomain cookie ++ "; HttpOnly; Secure"
 
+formatCookies :: [Cookie] -> BS.ByteString
+formatCookies = mconcat . intercalate ["; "] . map formatCookie
+  where
+    formatCookie cookie = [fromString $ ckName cookie, "=", fromString $ ckValue cookie]
+
 -- headerToCookies in Network.HTTP.Cookie is designed to work with the
 -- Set-Cookie header. This is a variant for the Cookie header
 -- (HdrSetCookie -> HdrCookie).
@@ -83,10 +106,11 @@ parseCookies dom hdrs = snd $ foldr (headerToCookies dom) ([],[]) hdrs
 
 -- | @headerToCookies dom hdr acc@
 headerToCookies :: String -> Header -> ([BS.ByteString], [Cookie]) -> ([BS.ByteString], [Cookie])
-headerToCookies dom ("Cookie", val) (accErr, accCookie) =
-    case parseOnly cookies val of
-        Left{}  -> (val:accErr, accCookie)
-        Right x -> (accErr, x ++ accCookie)
+headerToCookies dom (name, val) acc@(accErr, accCookie)
+  | name == hCookie = case parseOnly cookies val of
+      Left{}  -> (val:accErr, accCookie)
+      Right x -> (accErr, x ++ accCookie)
+  | otherwise = acc
   where
    cookies :: Parser [Cookie]
    cookies = sepBy1 cookie (";" *> spaces_l)
@@ -109,7 +133,6 @@ headerToCookies dom ("Cookie", val) (accErr, accCookie) =
                    , ckVersion = Nothing
                    , ckComment = Nothing
                    }
-headerToCookies _ _ acc = acc
 
 word, quotedstring :: Parser String
 quotedstring = char '"' *> many (satisfy $ not . (=='"')) <* char '"'
