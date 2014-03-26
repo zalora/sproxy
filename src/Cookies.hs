@@ -1,5 +1,6 @@
 module Cookies (
-  Cookie
+  Name
+, Value
 , parseCookies
 , removeCookie
 , formatCookies
@@ -26,6 +27,9 @@ import System.Posix.Types (EpochTime)
 import Data.Attoparsec.ByteString.Char8
 import Text.Read (readMaybe)
 
+type Name = String
+type Value = String
+
 data AuthToken = AuthToken { authEmail  :: String
                            , authName   :: (String, String)
                            , authExpiry :: EpochTime
@@ -45,9 +49,9 @@ instance Read AuthToken where
             [email, given, family, expire, digest] -> [(AuthToken email (given, family) (read expire) digest, "")]
             _ -> []
 
-removeCookie :: String -> [Cookie] -> Maybe (Cookie, [Cookie])
-removeCookie name cookies = case partition ((== name) . ckName) cookies of
-  (x:_, xs) -> Just (x, xs)
+removeCookie :: String -> [(Name, Value)] -> Maybe (Value, [(Name, Value)])
+removeCookie name cookies = case partition ((== name) . fst) cookies of
+  ((_, x):_, xs) -> Just (x, xs)
   _ -> Nothing
 
 authShelfLife :: EpochTime
@@ -93,48 +97,32 @@ setCookie cookie maxAge =
   ckName cookie ++ "=" ++ ckValue cookie ++
   "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ ckDomain cookie ++ "; HttpOnly; Secure"
 
-formatCookies :: [Cookie] -> BS.ByteString
+formatCookies :: [(Name, Value)] -> BS.ByteString
 formatCookies = mconcat . intercalate ["; "] . map formatCookie
   where
-    formatCookie cookie = [fromString $ ckName cookie, "=", fromString $ ckValue cookie]
+    formatCookie (name, value) = [fromString name, "=", fromString value]
 
--- headerToCookies in Network.HTTP.Cookie is designed to work with the
--- Set-Cookie header. This is a variant for the Cookie header
--- (HdrSetCookie -> HdrCookie).
-parseCookies :: String -> [Header] -> [Cookie]
-parseCookies dom hdrs = snd $ foldr (headerToCookies dom) ([],[]) hdrs
+parseCookies :: [Header] -> [(Name, Value)]
+parseCookies = foldr headerToCookies []
 
--- | @headerToCookies dom hdr acc@
-headerToCookies :: String -> Header -> ([BS.ByteString], [Cookie]) -> ([BS.ByteString], [Cookie])
-headerToCookies dom (name, val) acc@(accErr, accCookie)
+headerToCookies :: Header -> [(Name, Value)] -> [(Name, Value)]
+headerToCookies (name, val) acc
   | name == hCookie = case parseOnly cookies val of
-      Left{}  -> (val:accErr, accCookie)
-      Right x -> (accErr, x ++ accCookie)
+      Left{}  -> acc
+      Right x -> x ++ acc
   | otherwise = acc
   where
-   cookies :: Parser [Cookie]
-   cookies = sepBy1 cookie (";" *> spaces_l)
+   cookies :: Parser [(Name, Value)]
+   cookies = sepBy1 cookie (";" *> skipSpace)
 
-   cookie :: Parser Cookie
-   cookie = mkCookie <$> word <*> (spaces_l *> "=" *> spaces_l *> cvalue)
+   cookie :: Parser (Name, Value)
+   cookie = (,) <$> word <*> (skipSpace *> "=" *> skipSpace *> value)
 
-   cvalue :: Parser String
+   value :: Parser String
+   value = quotedstring <|> many1 (satisfy $ not . (==';')) <|> return ""
 
-   spaces_l = many (satisfy isSpace)
-
-   cvalue = quotedstring <|> many1 (satisfy $ not . (==';')) <|> return ""
-
-   mkCookie :: String -> String -> Cookie
-   mkCookie nm cval =
-	  MkCookie { ckName    = nm
-                   , ckValue   = cval
-                   , ckDomain  = map toLower dom
-                   , ckPath    = Nothing
-                   , ckVersion = Nothing
-                   , ckComment = Nothing
-                   }
-
-word, quotedstring :: Parser String
+quotedstring :: Parser String
 quotedstring = char '"' *> many (satisfy $ not . (=='"')) <* char '"'
 
+word :: Parser String
 word = many1 (satisfy (\x -> isAlphaNum x || x=='_' || x=='.' || x=='-' || x==':'))
