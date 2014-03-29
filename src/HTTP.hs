@@ -1,4 +1,4 @@
-module HTTP (URL, Request, Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
+module HTTP (URL, Request(..), Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, take, decimal, hexadecimal)
@@ -20,8 +20,14 @@ import Prelude hiding (length, take)
 
 type URL = BS.ByteString
 type Body = BL.ByteString
-type Request = (Method, URL, [Header], Body)
 type Response = (Status, [Header], Body)
+
+data Request = Request {
+  requestMethod :: Method
+, requestURL :: URL
+, requestHeaders :: [Header]
+, requestBody :: Body
+} deriving (Eq, Show)
 
 -- These parsers sacrifice correctness for simplicity/speed.
 
@@ -51,8 +57,8 @@ oneRequest :: BL.ByteString -> (Maybe Request, BL.ByteString)
 oneRequest s = case parse ((,) <$> requestLineP <*> manyTill headerP endOfLine) s of
                  Fail "" _ _ -> (Nothing, "")
                  Fail _ _ err -> error err
-                 Done rest ((method, url), headers) -> let (body, rest') = requestBody headers rest in
-                                                         (Just (method, url, headers, body), rest')
+                 Done rest ((method, url), headers) -> let (body, rest') = mkBody headers rest in
+                                                         (Just (Request method url headers body), rest')
 
 oneResponse :: BL.ByteString -> (Maybe Response, BL.ByteString)
 oneResponse s = case parse ((,) <$> responseLineP <*> manyTill headerP endOfLine) s of
@@ -61,8 +67,8 @@ oneResponse s = case parse ((,) <$> responseLineP <*> manyTill headerP endOfLine
                   Done rest (status, headers) -> let (body, rest') = responseBody headers rest in
                                                    (Just (status, headers, body), rest')
 
-requestBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
-requestBody hs s =
+mkBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
+mkBody hs s =
   case lookup "Content-Length" hs of
     Nothing -> case lookup "Transfer-Encoding" hs of
                  Just "chunked" -> chunkedBody s
@@ -83,11 +89,11 @@ responseBody :: [Header] -> BL.ByteString -> (Body, BL.ByteString)
 responseBody hs s =
   case lookup "Connection" hs of
     Just "close" -> (s, "") -- Read up until the end of the string.
-    _ -> requestBody hs s
+    _ -> mkBody hs s
 
 -- Note that this may not exactly match the original request.
 rawRequest :: Request -> BL.ByteString
-rawRequest (method, url, headers, body) =
+rawRequest (Request method url headers body) =
   -- TODO: Switch to HTTP/1.1 once we support re-using the client connection.
   BL.fromChunks ([method, " ", url, " HTTP/1.0\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
 
