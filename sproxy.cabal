@@ -2,7 +2,7 @@ name:                sproxy
 version:             0.7.3
 -- synopsis:
 -- description:
-license:             GPL-3
+license:             MIT
 license-file:        LICENSE
 copyright:           Zalora South East Asia Pte. Ltd
 author:              Chris Forno
