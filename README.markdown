@@ -19,12 +19,13 @@ Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
 
 ## HTTP headers passed to the back-end server:
 
-header           | value
----------------- | -----
-`From:`          | visitor's email address
-`X-Groups:`      | all groups that granted access to this resource, separated by commas
-`X-Given-Name:`  | the visitor's given (first) name
-`X-Family-Name:` | the visitor's family (last) name
+header            | value
+----------------- | -----
+`From:`           | visitor's email address
+`X-Groups:`       | all groups that granted access to this resource, separated by commas
+`X-Given-Name:`   | the visitor's given (first) name
+`X-Family-Name:`  | the visitor's family (last) name
+`X-Forwarded-For` | the visitor's IP address (added to the end of the list if header is already present in client request)
 
 ## Configuration File
 
