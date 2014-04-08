@@ -11,7 +11,8 @@ import Cookies
 import HTTP
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
-import Control.Exception (finally, bracket, handle, throw, SomeException)
+import Control.Exception
+import Data.Typeable (typeOf)
 import Control.Monad (forever, mzero, liftM, when)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.Aeson as Aeson
@@ -309,7 +310,7 @@ listen port f = do
     (h, _, _) <- accept s
     forkIO $ handle logError (f h)
  where logError :: SomeException -> IO ()
-       logError e = log (show e) >> throw e
+       logError (SomeException e) = log (show (typeOf e) ++ " (" ++ show e ++ ")")
 
 curl :: Curl.URLString -> [Curl.CurlOption] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 curl url options = Curl.withCurlDo $ do
