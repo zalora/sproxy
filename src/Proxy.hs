@@ -258,8 +258,8 @@ forwardRequest cf c db cookies (Request method path headers body) token = do
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
+                    insert "Connection" "close" $
                     setCookies $
-                    delete hCookie $
                     fromList headers
             BL.hPutStr h $ rawRequest (Request method path downStreamHeaders body)
             input <- BL.hGetContents h
@@ -272,7 +272,7 @@ forwardRequest cf c db cookies (Request method path headers body) token = do
             return continue
   where
     setCookies = case cookies of
-      [] -> id
+      [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
 
 authorizedGroups :: PSQL.Connection -> String -> BS.ByteString -> BS.ByteString -> Method -> IO [String]

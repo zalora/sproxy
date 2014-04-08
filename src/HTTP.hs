@@ -94,8 +94,7 @@ responseBody hs s =
 -- Note that this may not exactly match the original request.
 rawRequest :: Request -> BL.ByteString
 rawRequest (Request method url headers body) =
-  -- TODO: Switch to HTTP/1.1 once we support re-using the client connection.
-  BL.fromChunks ([method, " ", url, " HTTP/1.0\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
+  BL.fromChunks ([method, " ", url, " HTTP/1.1\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
 
 rawResponse :: Response -> BL.ByteString
 rawResponse (status, headers, body) =
