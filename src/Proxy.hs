@@ -240,7 +240,7 @@ serve cf credential clientSecret authTokenKey h = do
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> Request -> AuthToken -> IO (Bool)
+forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> Request -> AuthToken -> IO Bool
 forwardRequest cf c db cookies (Request method path headers body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     case groups of
