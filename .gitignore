@@ -1,5 +1,7 @@
-/cabal-dev
-/dist
-/config
-.cabal-sandbox/
-cabal.sandbox.config
+/dist/
+/cabal-dev/
+/.cabal-sandbox/
+/cabal.sandbox.config
+
+/config/client_secret
+/config/sproxy.yml
