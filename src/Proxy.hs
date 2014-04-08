@@ -7,6 +7,7 @@ module Proxy (
 , Config(..)
 ) where
 
+import Util
 import Cookies
 import HTTP
 
@@ -29,7 +30,8 @@ import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
 import qualified Database.PostgreSQL.Simple as PSQL
-import Network (PortID(..), listenOn, connectTo, accept)
+import Network (PortID(..), listenOn, connectTo)
+import Network.Socket (SockAddr, accept, socketToHandle)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
 import Network.HTTP.Types (Method, hCookie)
@@ -38,7 +40,7 @@ import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
 import Options.Applicative
-import System.IO (Handle, hClose)
+import System.IO (IOMode(..), Handle, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
 import Text.InterpolatedString.Perl6 (q)
@@ -159,8 +161,8 @@ runWithOptions opts = do
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
 -- | Redirects requests to https.
-redirectToHttps :: Handle -> IO ()
-redirectToHttps h = do
+redirectToHttps :: SockAddr -> Handle -> IO ()
+redirectToHttps _ h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
@@ -171,8 +173,8 @@ redirectToHttps h = do
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> TLS.Credential -> String -> String -> Handle -> IO ()
-serve cf credential clientSecret authTokenKey h = do
+serve :: Config -> TLS.Credential -> String -> String -> SockAddr -> Handle -> IO ()
+serve cf credential clientSecret authTokenKey addr h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [credential] }
@@ -230,7 +232,7 @@ serve cf credential clientSecret authTokenKey h = do
                          case auth of
                            Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
                            Just token -> do
-                             continue <- forwardRequest cf c db cookies request token
+                             continue <- forwardRequest cf c db cookies addr request token
                              when continue $ serve' c db rest
 
        cookieDomain = cfCookieDomain cf
@@ -241,9 +243,10 @@ serve cf credential clientSecret authTokenKey h = do
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> Request -> AuthToken -> IO Bool
-forwardRequest cf c db cookies (Request method path headers body) token = do
+forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
+forwardRequest cf c db cookies addr (Request method path headers body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
+    ip <- formatSockAddr addr
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
@@ -258,6 +261,7 @@ forwardRequest cf c db cookies (Request method path headers body) token = do
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
+                    addForwardedForHeader ip $
                     insert "Connection" "close" $
                     setCookies $
                     fromList headers
@@ -303,12 +307,13 @@ internalServerError c err = do
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
   TLS.sendData c $ rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
-listen :: PortID -> (Handle -> IO ()) -> IO ()
+listen :: PortID -> (SockAddr -> Handle -> IO ()) -> IO ()
 listen port f = do
   s <- listenOn port
   forever $ do
-    (h, _, _) <- accept s
-    forkIO $ handle logError (f h)
+    (clientSocket, addr) <- accept s
+    h <- socketToHandle clientSocket ReadWriteMode
+    forkIO $ handle logError (f addr h)
  where logError :: SomeException -> IO ()
        logError (SomeException e) = log (show (typeOf e) ++ " (" ++ show e ++ ")")
 
