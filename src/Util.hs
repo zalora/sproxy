@@ -2,6 +2,7 @@
 module Util where
 
 import           Control.Applicative
+import           Data.Char
 import           Data.String
 import           Data.Monoid
 import           Data.Map (Map)
@@ -19,3 +20,6 @@ addForwardedForHeader :: HostName -> Map HeaderName ByteString -> Map HeaderName
 addForwardedForHeader ip = Map.insertWith combine "X-Forwarded-For" (fromString ip)
   where
     combine new old = mconcat [old, ", ", new]
+
+strip :: String -> String
+strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace

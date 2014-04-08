@@ -143,7 +143,7 @@ runWithOptions opts = do
     Left err -> log $ ("error parsing configuration file " ++
         appConfigFile opts ++ ": " ++ show err)
     Right config -> do
-      clientSecret <- readFile (cfClientSecretFile config)
+      clientSecret <- strip <$> readFile (cfClientSecretFile config)
       authTokenKey <- readFile (cfAuthTokenKeyFile config)
       credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts config) (cfSslKey config)
       -- Immediately fork a new thread for accepting connections since
