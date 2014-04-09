@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module HTTP (URL, Request(..), Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))

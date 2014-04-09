@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module CookiesSpec (main, spec) where
 
 import           Test.Hspec

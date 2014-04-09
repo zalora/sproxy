@@ -1,4 +1,4 @@
-{-# LANGUAGE ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables #-}
 module Proxy (
   run
 
