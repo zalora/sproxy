@@ -11,7 +11,7 @@ import Util
 import Cookies
 import HTTP
 
-import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, myThreadId)
+import Control.Concurrent (forkIO, myThreadId)
 import Control.Exception
 import Data.Typeable (typeOf)
 import Control.Monad (forever, mzero, liftM, when)
@@ -148,12 +148,10 @@ runWithOptions opts = do
       credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts config) (cfSslKey config)
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
-      wait <- newEmptyMVar
-      _ <- forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey))
-                                  `finally` (putMVar wait ()))
+
+      _ <- forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey)))
       -- Listen on port 80 just to redirect everything to HTTPS.
-      _ <- forkIO (handle handleError (listen (PortNumber 80) redirectToHttps))
-      takeMVar wait
+      handle handleError (listen (PortNumber 80) redirectToHttps)
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
        -- Usually combined certs are in server, intermediate order,
