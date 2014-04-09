@@ -40,7 +40,7 @@ import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
 import Options.Applicative
-import System.IO (IOMode(..), Handle, hClose)
+import System.IO
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
 import Text.InterpolatedString.Perl6 (q)
@@ -313,7 +313,7 @@ listen port f = do
   forever $ do
     (clientSocket, addr) <- accept s
     h <- socketToHandle clientSocket ReadWriteMode
-    forkIO $ handle logError (f addr h)
+    forkIO $ handle logError (f addr h `finally` hClose h)
  where logError :: SomeException -> IO ()
        logError (SomeException e) = log (show (typeOf e) ++ " (" ++ show e ++ ")")
 
