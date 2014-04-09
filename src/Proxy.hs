@@ -123,6 +123,7 @@ run = execParser opts >>= runWithOptions
     parser = SProxyApp <$> strOption (long "config" <>
                                       noArgError ShowHelpText <>
                                       metavar "CONFIG" <>
+                                      value "config/sproxy.yml" <>
                                       help "config file path")
     opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
 
