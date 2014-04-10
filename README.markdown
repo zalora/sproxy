@@ -29,8 +29,64 @@ header            | value
 
 ## Configuration File
 
+By default `sproxy` will read its configuration from `config/sproxy.yml`.  You
+can specify a custom path with:
+
 ```
-sproxy --config example.conf
+sproxy --config /path/to/sproxy.yml
 ```
 
-See the included `example.config`
+## Development
+
+```
+$ cp config/sproxy.yml.example config/sproxy.yml
+```
+
+Make sure that you have the follwing entry in `/etc/hosts`:
+
+```
+127.0.2.1       dev.zalora.com
+```
+
+
+### Create OAuth credentials
+
+Create a project in the [Google Developers Console](https://console.developers.google.com/project).
+
+ - visit *APIs & auth* -> *Credentials*
+ - select *CREATE NEW CLIENT ID*
+ - use `https://dev.zalora.com` as *Authorized JavaScript origins*
+ - use `https://dev.zalora.com/` as *Authorized redirect URI*
+
+Put the `Client ID` in `config/sproxy.yml` and the `Client secret` in a file
+called `config/client_secret`.
+
+Make sure that you set an *Email address* and a  *Product name* under *APIs & auth* -> *Consent screen*!
+
+### Create a database
+
+In `example/privileges.sql` replace `me@zalora.com` with your actual email
+address.
+
+```
+$ createdb sproxy && psql sproxy < sproxy.sql && psql sproxy < example/privileges.sql
+```
+
+Make sure that the `database` setting in `config/sproxy.yml` is suitable for
+your database setup.
+
+### Build and run
+
+Build and run `sproxy`:
+
+```
+$ cabal build && sudo ./dist/build/sproxy/sproxy
+```
+
+Run example backend application:
+
+```
+$ runhaskell example/app.hs
+```
+
+Make a request to <https://dev.zalora.com/>.

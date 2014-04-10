@@ -1,13 +1,17 @@
-cookie_domain: ds.zalora.com
+cookie_domain: dev.zalora.com
 cookie_name: sproxy
-contact: datascience@zalora.com
+contact: me@example.com
+
 # The client ID and client secret come from Google's "Cloud Console".
-client_id: 668874393930-74ai26p8jqgb3m83qll3qlp4vn0h1nny.apps.googleusercontent.com
-client_secret: /run/keys/sproxy/client_secret
+client_id: a611zak494jxdgdn6ltlkn547rme91ig.apps.googleusercontent.com
+client_secret: config/client_secret
+
 # The auth token key should have a minimum of 160 bits of randomness.
 # `openssl rand -base64 160` is a good candidate
-auth_token_key: /run/keys/sproxy/auth_token_key
-ssl_key: server.key
+auth_token_key: config/auth_token_key.example
+
+ssl_key: config/server.key.example
+
 # Include extra (intermediate) certs in a single file. Make sure that they're sorted from server downward, i.e.:
 # -----BEGIN CERTIFICATE-----
 #    (server certificate)
@@ -18,10 +22,11 @@ ssl_key: server.key
 # -----BEGIN CERTIFICATE-----
 #  (optional CA certificate)
 # -----END CERTIFICATE-----
-ssl_certs: server-combined.crt
+ssl_certs: config/server.crt.example
 
 # PostgreSQL database (connection string)
-database: "hostaddr=127.0.0.1 user=sproxy dbname=sproxy"
+database: "user=you dbname=sproxy"
+
 # To initialize/populate the DB, see sproxy.sql.
 
 # Which backend should sproxy relay the requests to?
