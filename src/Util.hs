@@ -21,5 +21,8 @@ addForwardedForHeader ip = Map.insertWith combine "X-Forwarded-For" (fromString 
   where
     combine new old = mconcat [old, ", ", new]
 
+removeConnectionHeader :: [Header] -> [Header]
+removeConnectionHeader = filter ((/= hConnection) . fst)
+
 strip :: String -> String
 strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace

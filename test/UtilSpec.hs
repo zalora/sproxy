@@ -32,3 +32,7 @@ spec = do
       it "augments it" $ do
         let headers = Map.fromList [("X-Forwarded-For", "172.16.254.1")]
         addForwardedForHeader "127.0.0.1" headers `shouldBe` Map.fromList [("X-Forwarded-For", "172.16.254.1, 127.0.0.1")]
+
+  describe "removeConnectionHeader" $ do
+    it "removes Connection header" $ do
+      removeConnectionHeader [("Connection", "close"), ("Content-Type", "text/html")] `shouldBe` [("Content-Type", "text/html")]
