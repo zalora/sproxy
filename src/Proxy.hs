@@ -267,10 +267,10 @@ forwardRequest cf c db cookies addr (Request method path headers body) token = d
             BL.hPutStr h $ rawRequest (Request method path downStreamHeaders body)
             input <- BL.hGetContents h
             continue <- case oneResponse input of
-                (Nothing, _) -> return False -- no more responses
-                (Just resp@(_, headers', _), _) -> do
-                    TLS.sendData c $ rawResponse resp
-                    return $ lookup "Connection" headers' /= Just "close"
+                (Nothing, _) -> return False
+                (Just (status, headers_, body_), _) -> do
+                    TLS.sendData c $ rawResponse (status, removeConnectionHeader headers_, body_)
+                    return True
             hClose h
             return continue
   where
