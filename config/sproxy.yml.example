@@ -1,6 +1,5 @@
 cookie_domain: dev.zalora.com
 cookie_name: sproxy
-contact: me@example.com
 
 # The client ID and client secret come from Google's "Cloud Console".
 client_id: a611zak494jxdgdn6ltlkn547rme91ig.apps.googleusercontent.com
