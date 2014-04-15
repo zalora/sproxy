@@ -70,7 +70,6 @@ instance Aeson.FromJSON UserInfo where
 
 data Config = Config { cfCookieDomain :: String
                      , cfCookieName :: String
-                     , cfContact :: String
                      , cfClientID :: String
                      , cfClientSecretFile :: FilePath
                      , cfAuthTokenKeyFile :: FilePath
@@ -87,7 +86,6 @@ instance FromJSON Config where
     parseJSON (Object m) = Config <$>
         m .: "cookie_domain" <*>
         m .: "cookie_name" <*>
-        m .: "contact" <*>
         m .: "client_id" <*>
         m .: "client_secret" <*>
         m .: "auth_token_key" <*>
