@@ -34,7 +34,7 @@ import Network (PortID(..), listenOn, connectTo)
 import Network.Socket (SockAddr, accept, socketToHandle)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
-import Network.HTTP.Types (Method, hCookie)
+import Network.HTTP.Types (Method, hCookie, urlEncode, urlDecode)
 import qualified Network.HTTP.Types.URI as Query
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
@@ -199,7 +199,7 @@ serve cf credential clientSecret authTokenKey addr h = do
                  let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
                  -- This isn't a perfect test, but it's perfect for testing.
                  case (lookup "state" query, lookup "code" query) of
-                   (Just (Just _), Just (Just code)) -> do
+                   (Just (Just path), Just (Just code)) -> do
                      tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
                      case tokenRes of
                        Left err -> internalServerError c err >> serve' c db rest
@@ -217,17 +217,17 @@ serve cf credential clientSecret authTokenKey addr h = do
                                    Just userInfo -> do
                                      clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                                      let cookie = setCookie (HTTP.MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
-                                         resp' = response 302 "Found" [("Location", cs $ show $ rootURI request), ("Set-Cookie", BU.fromString cookie)] ""
+                                         resp' = response 302 "Found" [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", BU.fromString cookie)] ""
                                      TLS.sendData c $ rawResponse resp'
                                      serve' c db rest
                    _ -> do
                      -- Check for an auth cookie.
                      case removeCookie cookieName (parseCookies headers) of
-                       Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
+                       Nothing -> redirectForAuth request c >> serve' c db rest
                        Just (authCookie, cookies) -> do
                          auth <- validAuth authTokenKey authCookie
                          case auth of
-                           Nothing -> redirectForAuth c (rootURI request) >> serve' c db rest
+                           Nothing -> redirectForAuth request c >> serve' c db rest
                            Just token -> do
                              continue <- forwardRequest cf c db cookies addr request token
                              when continue $ serve' c db rest
@@ -235,8 +235,10 @@ serve cf credential clientSecret authTokenKey addr h = do
        cookieDomain = cfCookieDomain cf
        cookieName = cfCookieName cf
 
-       redirectForAuth c redirectUri = do
-         let authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2Fprofile&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
+       redirectForAuth request c = do
+         let redirectUri = rootURI request
+             path = urlEncode True (requestPath request)
+             authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
          TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
