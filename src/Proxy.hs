@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ExtendedDefaultRules, QuasiQuotes, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Proxy (
   run
 
@@ -9,10 +9,6 @@ module Proxy (
 -- exported for testing
 , runProxy
 ) where
-
-import Util
-import Cookies
-import HTTP
 
 import Control.Concurrent (forkIO, myThreadId)
 import Control.Exception
@@ -32,12 +28,11 @@ import Data.Map as Map (fromList, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
-import qualified Database.PostgreSQL.Simple as PSQL
 import Network (PortID(..), listenOn, sClose, connectTo)
 import Network.Socket (SockAddr, PortNumber, accept, socketToHandle)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
-import Network.HTTP.Types (Method, hCookie, urlEncode, urlDecode)
+import Network.HTTP.Types (hCookie, urlEncode, urlDecode)
 import qualified Network.HTTP.Types.URI as Query
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
@@ -46,9 +41,13 @@ import Options.Applicative hiding (action)
 import System.IO
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
-import Text.InterpolatedString.Perl6 (q)
 
 import Prelude hiding (log)
+
+import Util
+import Cookies
+import HTTP
+import Authorize
 
 -- * These are JSON responses that come from Google.
 
@@ -151,7 +150,7 @@ runWithOptions opts = do
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
 
-      _ <- forkIO (handle handleError (runProxy 443 config credential clientSecret authTokenKey))
+      _ <- forkIO (handle handleError (runProxy 443 config credential clientSecret authTokenKey (withDatabaseAuthorizeAction . cs $ cfDatabase config)))
       -- Listen on port 80 just to redirect everything to HTTPS.
       handle handleError (listen 80 redirectToHttps)
  where handleError :: SomeException -> IO ()
@@ -160,8 +159,8 @@ runWithOptions opts = do
        -- but the tls library expects them in the opposite order.
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
-runProxy :: PortNumber -> Config -> TLS.Credential -> String -> String -> IO ()
-runProxy port config credential clientSecret authTokenKey = (listen port (serve config credential clientSecret authTokenKey))
+runProxy :: PortNumber -> Config -> TLS.Credential -> String -> String -> WithAuthorizeAction -> IO ()
+runProxy port config credential clientSecret authTokenKey authorize = (listen port (serve config credential clientSecret authTokenKey authorize))
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Handle -> IO ()
@@ -178,8 +177,8 @@ type SendData = BL.ByteString -> IO ()
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> TLS.Credential -> String -> String -> SockAddr -> Handle -> IO ()
-serve cf credential clientSecret authTokenKey addr h = do
+serve :: Config -> TLS.Credential -> String -> String -> WithAuthorizeAction -> SockAddr -> Handle -> IO ()
+serve cf credential clientSecret authTokenKey withAuthorizeAction addr h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [credential] }
@@ -188,39 +187,38 @@ serve cf credential clientSecret authTokenKey addr h = do
   ctx <- TLS.contextNew h params rng
   TLS.handshake ctx
   input <- tlsGetContents ctx
-  -- Establish a DB connection (used for authorization checks).
-  bracket
-    (PSQL.connectPostgreSQL (cs $ cfDatabase cf))
-    (PSQL.close)
-    (\db -> serve' (TLS.sendData ctx) db input)
+  withAuthorizeAction $ do
+    \authorize -> serve_ (TLS.sendData ctx) authorize input
   TLS.bye ctx
- where serve' :: SendData -> PSQL.Connection -> BL.ByteString -> IO ()
-       serve' send db input = do
-         -- TODO: Clean this up. The logic is really messy.
-         case oneRequest input of
-           (Nothing, _) -> return () -- no more requests
-           (Just request@(Request _ url headers _), rest) -> do
-             -- TODO: Don't loop for more input on Connection: close header.
-             -- Check if this is an authorization response.
-             case URI.parseURIReference $ BU.toString url of
-               Nothing -> internalServerError send "Failed to parse request URI" >> serve' send db rest
-               Just uri -> do
-                 let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
-                 -- This isn't a perfect test, but it's perfect for testing.
-                 case (lookup "state" query, lookup "code" query) of
-                   (Just (Just path), Just (Just code)) -> do
-                     authenticate authTokenKey clientSecret cf send request path code >> serve' send db rest
-                   _ -> do
-                     -- Check for an auth cookie.
-                     case removeCookie (cfCookieName cf) (parseCookies headers) of
-                       Nothing -> redirectForAuth cf request send >> serve' send db rest
-                       Just (authCookie, cookies) -> do
-                         auth <- validAuth authTokenKey authCookie
-                         case auth of
-                           Nothing -> redirectForAuth cf request send >> serve' send db rest
-                           Just token -> do
-                             continue <- forwardRequest cf send db cookies addr request token
-                             when continue $ serve' send db rest
+  where
+    serve_ :: SendData -> AuthorizeAction -> BL.ByteString -> IO ()
+    serve_ send authorize = go
+      where
+        go :: BL.ByteString -> IO ()
+        go input = case oneRequest input of
+          (Nothing, _) -> return () -- no more requests
+          (Just request@(Request _ url headers _), rest) -> do
+            -- TODO: Don't loop for more input on Connection: close header.
+            -- Check if this is an authorization response.
+            case URI.parseURIReference $ BU.toString url of
+              Nothing -> internalServerError send "Failed to parse request URI" >> go rest
+              Just uri -> do
+                let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
+                -- This isn't a perfect test, but it's perfect for testing.
+                case (lookup "state" query, lookup "code" query) of
+                  (Just (Just path), Just (Just code)) -> do
+                    authenticate authTokenKey clientSecret cf send request path code >> go rest
+                  _ -> do
+                    -- Check for an auth cookie.
+                    case removeCookie (cfCookieName cf) (parseCookies headers) of
+                      Nothing -> redirectForAuth cf request send >> go rest
+                      Just (authCookie, cookies) -> do
+                        auth <- validAuth authTokenKey authCookie
+                        case auth of
+                          Nothing -> redirectForAuth cf request send >> go rest
+                          Just token -> do
+                            continue <- forwardRequest cf send authorize cookies addr request token
+                            when continue $ go rest
 
 redirectForAuth :: Config -> Request -> SendData -> IO ()
 redirectForAuth cf request send = do
@@ -255,9 +253,9 @@ authenticate authTokenKey clientSecret cf send request path code = do
     cookieName = cfCookieName cf
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> PSQL.Connection -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
-forwardRequest cf send db cookies addr (Request method path headers body) token = do
-    groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
+forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
+forwardRequest cf send authorize cookies addr (Request method path headers body) token = do
+    groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
         [] -> do
@@ -290,22 +288,6 @@ forwardRequest cf send db cookies addr (Request method path headers body) token 
     setCookies = case cookies of
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
-
-authorizedGroups :: PSQL.Connection -> String -> BS.ByteString -> BS.ByteString -> Method -> IO [String]
-authorizedGroups db email domain path method =
-  (fmap PSQL.fromOnly) `fmap` PSQL.query db [q|
-SELECT gp."group" FROM group_privilege gp
-INNER JOIN group_member gm ON gm."group" = gp."group"
-INNER JOIN "group" g ON gp."group" = g."group"
-WHERE ? LIKE email
-AND ? LIKE "domain"
-AND privilege IN (
-  SELECT p.privilege FROM privilege p
-  INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
-  WHERE ? LIKE pr."domain" AND ? LIKE "path" AND ? ILIKE "method"
-  ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
-)
-|] (email, domain, domain, path, method)
 
 log :: String -> IO ()
 log s = do
