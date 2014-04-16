@@ -4,7 +4,7 @@ module Proxy (
 
 -- exported to silence warnings
 , AccessToken(..)
-, Config(..)
+, ConfigFile(..)
 
 -- exported for testing
 , runProxy
@@ -45,6 +45,7 @@ import qualified System.Log.Logger as Log
 import Prelude hiding (log)
 
 import Util
+import ConfigFile
 import Cookies
 import HTTP
 import Authorize
@@ -66,37 +67,6 @@ instance Aeson.FromJSON UserInfo where
                                v Aeson..: "given_name" <*>
                                v Aeson..: "family_name"
   parseJSON _ = mzero
-
-
--- * configuration
-
-data Config = Config { cfCookieDomain :: String
-                     , cfCookieName :: String
-                     , cfClientID :: String
-                     , cfClientSecretFile :: FilePath
-                     , cfAuthTokenKeyFile :: FilePath
-                     , cfSslKey :: FilePath
-                     , cfSslCerts :: FilePath
-                     , cfDatabase :: String
-                     , cfBackendAddress :: String
-                     , cfBackendPort :: Integer
-                     }
-  deriving Show
-
--- The configuration file is YAML, but the YAML library uses JSON instances.
-instance FromJSON Config where
-    parseJSON (Object m) = Config <$>
-        m .: "cookie_domain" <*>
-        m .: "cookie_name" <*>
-        m .: "client_id" <*>
-        m .: "client_secret" <*>
-        m .: "auth_token_key" <*>
-        m .: "ssl_key" <*>
-        m .: "ssl_certs" <*>
-        m .: "database" <*>
-        m .: "backend_address" <*>
-        m .: "backend_port"
-    parseJSON _ = mzero
 
 -- https://wiki.zalora.com/Main_Page -> https://wiki.zalora.com/
 -- Note that this always uses https:
@@ -139,7 +109,7 @@ runWithOptions opts = do
   -- config file.
 
   Log.updateGlobalLogger "sproxy" (Log.setLevel Log.DEBUG)
-  config' :: Either ParseException Config <- decodeFileEither (appConfigFile opts)
+  config' :: Either ParseException ConfigFile <- decodeFileEither (appConfigFile opts)
   case config' of
     Left err -> log $ ("error parsing configuration file " ++
         appConfigFile opts ++ ": " ++ show err)
@@ -159,7 +129,7 @@ runWithOptions opts = do
        -- but the tls library expects them in the opposite order.
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
-runProxy :: PortNumber -> Config -> TLS.Credential -> String -> String -> WithAuthorizeAction -> IO ()
+runProxy :: PortNumber -> ConfigFile -> TLS.Credential -> String -> String -> WithAuthorizeAction -> IO ()
 runProxy port config credential clientSecret authTokenKey authorize = (listen port (serve config credential clientSecret authTokenKey authorize))
 
 -- | Redirects requests to https.
@@ -177,7 +147,7 @@ type SendData = BL.ByteString -> IO ()
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> TLS.Credential -> String -> String -> WithAuthorizeAction -> SockAddr -> Handle -> IO ()
+serve :: ConfigFile -> TLS.Credential -> String -> String -> WithAuthorizeAction -> SockAddr -> Handle -> IO ()
 serve cf credential clientSecret authTokenKey withAuthorizeAction addr h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
@@ -220,14 +190,14 @@ serve cf credential clientSecret authTokenKey withAuthorizeAction addr h = do
                             continue <- forwardRequest cf send authorize cookies addr request token
                             when continue $ go rest
 
-redirectForAuth :: Config -> Request -> SendData -> IO ()
+redirectForAuth :: ConfigFile -> Request -> SendData -> IO ()
 redirectForAuth cf request send = do
   let redirectUri = rootURI request
       path = urlEncode True (requestPath request)
       authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
   send . rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
-authenticate :: String -> String -> Config -> SendData -> Request -> BS.ByteString -> BS.ByteString -> IO ()
+authenticate :: String -> String -> ConfigFile -> SendData -> Request -> BS.ByteString -> BS.ByteString -> IO ()
 authenticate authTokenKey clientSecret cf send request path code = do
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
   case tokenRes of
@@ -253,7 +223,7 @@ authenticate authTokenKey clientSecret cf send request path code = do
     cookieName = cfCookieName cf
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
+forwardRequest :: ConfigFile -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
 forwardRequest cf send authorize cookies addr (Request method path headers body) token = do
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr

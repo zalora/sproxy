@@ -45,7 +45,7 @@ spec = do
     clientSecret = "5i8VKL5PBzDgr5rGm-cg0LuN"
     authTokenKey = "k+ua8EuGyb0rrBV1237I2+ioqtxUOJQ3x3l6JUz/Qu7JaYfA5z0ihnwWLnq8bK+v\nsHuCMgq6R7/f9QuKkpz47DuKdcGNxhFRiL7Ee75gvDzHNTm/IsD43hlJ8ggEaPXW\n7NQFRK19v9H8jyndKxJUWvyPVSwQGIv0JOSS2mXz2/dn8sq1TlVPsIX/VS00VCFm\nya0A7oOJ/cfBz/z0MXvSzg==\n"
 
-    config = Config {
+    config = ConfigFile {
         cfCookieDomain = error "cfCookieDomain"
       , cfCookieName = "sproxy"
       , cfClientID = error "cfClientID"
