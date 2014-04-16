@@ -171,6 +171,8 @@ redirectToHttps _ h = do
     (Nothing, _) -> return ()
     (Just request, _) -> BL.hPutStr h $ rawResponse $ response 303 "See Other" [("Location", cs $ show $ requestURI request)] ""
 
+type SendData = BL.ByteString -> IO ()
+
 -- | Actual server:
 -- - ssl handshake
 -- - google authentication
@@ -190,10 +192,10 @@ serve cf credential clientSecret authTokenKey addr h = do
   bracket
     (PSQL.connectPostgreSQL (cs $ cfDatabase cf))
     (PSQL.close)
-    (\db -> serve' ctx db input)
+    (\db -> serve' (TLS.sendData ctx) db input)
   TLS.bye ctx
- where serve' :: TLS.Context -> PSQL.Connection -> BL.ByteString -> IO ()
-       serve' c db input =
+ where serve' :: SendData -> PSQL.Connection -> BL.ByteString -> IO ()
+       serve' send db input = do
          -- TODO: Clean this up. The logic is really messy.
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
@@ -201,66 +203,66 @@ serve cf credential clientSecret authTokenKey addr h = do
              -- TODO: Don't loop for more input on Connection: close header.
              -- Check if this is an authorization response.
              case URI.parseURIReference $ BU.toString url of
-               Nothing -> internalServerError c "Failed to parse request URI" >> serve' c db rest
+               Nothing -> internalServerError send "Failed to parse request URI" >> serve' send db rest
                Just uri -> do
                  let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
                  -- This isn't a perfect test, but it's perfect for testing.
                  case (lookup "state" query, lookup "code" query) of
                    (Just (Just path), Just (Just code)) -> do
-                     authenticate authTokenKey clientSecret cf c request path code >> serve' c db rest
+                     authenticate authTokenKey clientSecret cf send request path code >> serve' send db rest
                    _ -> do
                      -- Check for an auth cookie.
                      case removeCookie (cfCookieName cf) (parseCookies headers) of
-                       Nothing -> redirectForAuth cf request c >> serve' c db rest
+                       Nothing -> redirectForAuth cf request send >> serve' send db rest
                        Just (authCookie, cookies) -> do
                          auth <- validAuth authTokenKey authCookie
                          case auth of
-                           Nothing -> redirectForAuth cf request c >> serve' c db rest
+                           Nothing -> redirectForAuth cf request send >> serve' send db rest
                            Just token -> do
-                             continue <- forwardRequest cf c db cookies addr request token
-                             when continue $ serve' c db rest
+                             continue <- forwardRequest cf send db cookies addr request token
+                             when continue $ serve' send db rest
 
-redirectForAuth :: Config -> Request -> TLS.Context -> IO ()
-redirectForAuth cf request c = do
+redirectForAuth :: Config -> Request -> SendData -> IO ()
+redirectForAuth cf request send = do
   let redirectUri = rootURI request
       path = urlEncode True (requestPath request)
       authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
-  TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
+  send . rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
-authenticate :: String -> String -> Config -> TLS.Context -> Request -> BS.ByteString -> BS.ByteString -> IO ()
-authenticate authTokenKey clientSecret cf c request path code = do
+authenticate :: String -> String -> Config -> SendData -> Request -> BS.ByteString -> BS.ByteString -> IO ()
+authenticate authTokenKey clientSecret cf send request path code = do
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
   case tokenRes of
-    Left err -> internalServerError c err
+    Left err -> internalServerError send err
     Right resp -> do
       case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
         Nothing -> do
-          internalServerError c "Received an invalid response from Google's authentication server."
+          internalServerError send "Received an invalid response from Google's authentication server."
         Just token -> do
           infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
           case infoRes of
-            Left err -> internalServerError c err
+            Left err -> internalServerError send err
             Right i -> do
               case Aeson.decode $ BLU.fromString $ Curl.respBody i of
-                Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server."
+                Nothing -> internalServerError send "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie (HTTP.MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
                       resp' = response 302 "Found" [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", BU.fromString cookie)] ""
-                  TLS.sendData c $ rawResponse resp'
+                  send $ rawResponse resp'
   where
     cookieDomain = cfCookieDomain cf
     cookieName = cfCookieName cf
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
-forwardRequest cf c db cookies addr (Request method path headers body) token = do
+forwardRequest :: Config -> SendData -> PSQL.Connection -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
+forwardRequest cf send db cookies addr (Request method path headers body) token = do
     groups <- authorizedGroups db (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            TLS.sendData c $ rawResponse $ response 403 "Forbidden" [] "Access Denied"
+            send . rawResponse $ response 403 "Forbidden" [] "Access Denied"
             return True
         _ -> do
             -- TODO: Reuse connections to the backend server.
@@ -280,7 +282,7 @@ forwardRequest cf c db cookies addr (Request method path headers body) token = d
             continue <- case oneResponse input of
                 (Nothing, _) -> return False
                 (Just (status, headers_, body_), _) -> do
-                    TLS.sendData c $ rawResponse (status, removeConnectionHeader headers_, body_)
+                    send $ rawResponse (status, removeConnectionHeader headers_, body_)
                     return True
             hClose h
             return continue
@@ -311,11 +313,11 @@ log s = do
   t <- getCurrentTime
   Log.debugM "sproxy" $ show tid ++ " " ++ show t ++ ": " ++ s
 
-internalServerError :: TLS.Context -> String -> IO ()
-internalServerError c err = do
+internalServerError :: SendData -> String -> IO ()
+internalServerError send err = do
   log $ show err
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
-  TLS.sendData c $ rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
+  send . rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
 listen :: PortNumber -> (SockAddr -> Handle -> IO ()) -> IO ()
 listen port f = do
