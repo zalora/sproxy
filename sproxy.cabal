@@ -89,5 +89,10 @@ test-suite spec
                        utf8-string,
                        x509,
                        yaml >= 0.8,
-                       hspec >= 1.5
+
+                       hspec >= 1.5,
+                       http-conduit,
+                       wai,
+                       warp,
+                       connection
   default-language:    Haskell2010
