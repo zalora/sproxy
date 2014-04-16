@@ -5,6 +5,9 @@ module Proxy (
 -- exported to silence warnings
 , AccessToken(..)
 , Config(..)
+
+-- exported for testing
+, runProxy
 ) where
 
 import Util
@@ -31,7 +34,7 @@ import qualified Data.X509 as X509
 import Data.Yaml
 import qualified Database.PostgreSQL.Simple as PSQL
 import Network (PortID(..), listenOn, connectTo)
-import Network.Socket (SockAddr, accept, socketToHandle)
+import Network.Socket (SockAddr, PortNumber, accept, socketToHandle)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
 import Network.HTTP.Types (Method, hCookie, urlEncode, urlDecode)
@@ -148,14 +151,17 @@ runWithOptions opts = do
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
 
-      _ <- forkIO (handle handleError (listen (PortNumber 443) (serve config credential clientSecret authTokenKey)))
+      _ <- forkIO (handle handleError (runProxy 443 config credential clientSecret authTokenKey))
       -- Listen on port 80 just to redirect everything to HTTPS.
-      handle handleError (listen (PortNumber 80) redirectToHttps)
+      handle handleError (listen 80 redirectToHttps)
  where handleError :: SomeException -> IO ()
        handleError e = log $ show e
        -- Usually combined certs are in server, intermediate order,
        -- but the tls library expects them in the opposite order.
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
+
+runProxy :: PortNumber -> Config -> TLS.Credential -> String -> String -> IO ()
+runProxy port config credential clientSecret authTokenKey = (listen port (serve config credential clientSecret authTokenKey))
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Handle -> IO ()
@@ -186,7 +192,8 @@ serve cf credential clientSecret authTokenKey addr h = do
     (PSQL.close)
     (\db -> serve' ctx db input)
   TLS.bye ctx
- where serve' c db input =
+ where serve' :: TLS.Context -> PSQL.Connection -> BL.ByteString -> IO ()
+       serve' c db input =
          -- TODO: Clean this up. The logic is really messy.
          case oneRequest input of
            (Nothing, _) -> return () -- no more requests
@@ -200,46 +207,50 @@ serve cf credential clientSecret authTokenKey addr h = do
                  -- This isn't a perfect test, but it's perfect for testing.
                  case (lookup "state" query, lookup "code" query) of
                    (Just (Just path), Just (Just code)) -> do
-                     tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
-                     case tokenRes of
-                       Left err -> internalServerError c err >> serve' c db rest
-                       Right resp -> do
-                         case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
-                           Nothing -> do
-                             internalServerError c "Received an invalid response from Google's authentication server." >> serve' c db rest
-                           Just token -> do
-                             infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
-                             case infoRes of
-                               Left err -> internalServerError c err >> serve' c db rest
-                               Right i -> do
-                                 case Aeson.decode $ BLU.fromString $ Curl.respBody i of
-                                   Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server." >> serve' c db rest
-                                   Just userInfo -> do
-                                     clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
-                                     let cookie = setCookie (HTTP.MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
-                                         resp' = response 302 "Found" [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", BU.fromString cookie)] ""
-                                     TLS.sendData c $ rawResponse resp'
-                                     serve' c db rest
+                     authenticate authTokenKey clientSecret cf c request path code >> serve' c db rest
                    _ -> do
                      -- Check for an auth cookie.
-                     case removeCookie cookieName (parseCookies headers) of
-                       Nothing -> redirectForAuth request c >> serve' c db rest
+                     case removeCookie (cfCookieName cf) (parseCookies headers) of
+                       Nothing -> redirectForAuth cf request c >> serve' c db rest
                        Just (authCookie, cookies) -> do
                          auth <- validAuth authTokenKey authCookie
                          case auth of
-                           Nothing -> redirectForAuth request c >> serve' c db rest
+                           Nothing -> redirectForAuth cf request c >> serve' c db rest
                            Just token -> do
                              continue <- forwardRequest cf c db cookies addr request token
                              when continue $ serve' c db rest
 
-       cookieDomain = cfCookieDomain cf
-       cookieName = cfCookieName cf
+redirectForAuth :: Config -> Request -> TLS.Context -> IO ()
+redirectForAuth cf request c = do
+  let redirectUri = rootURI request
+      path = urlEncode True (requestPath request)
+      authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
+  TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
 
-       redirectForAuth request c = do
-         let redirectUri = rootURI request
-             path = urlEncode True (requestPath request)
-             authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ cfClientID cf ++ "&approval_prompt=force&access_type=offline"
-         TLS.sendData c $ rawResponse $ response 302 "Found" [("Location", BU.fromString $ authURL)] ""
+authenticate :: String -> String -> Config -> TLS.Context -> Request -> BS.ByteString -> BS.ByteString -> IO ()
+authenticate authTokenKey clientSecret cf c request path code = do
+  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ BU.toString code, "client_id=" ++ cfClientID cf, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
+  case tokenRes of
+    Left err -> internalServerError c err
+    Right resp -> do
+      case Aeson.decode $ BLU.fromString $ Curl.respBody resp of
+        Nothing -> do
+          internalServerError c "Received an invalid response from Google's authentication server."
+        Just token -> do
+          infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
+          case infoRes of
+            Left err -> internalServerError c err
+            Right i -> do
+              case Aeson.decode $ BLU.fromString $ Curl.respBody i of
+                Nothing -> internalServerError c "Received an invalid user info response from Google's authentication server."
+                Just userInfo -> do
+                  clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
+                  let cookie = setCookie (HTTP.MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
+                      resp' = response 302 "Found" [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", BU.fromString cookie)] ""
+                  TLS.sendData c $ rawResponse resp'
+  where
+    cookieDomain = cfCookieDomain cf
+    cookieName = cfCookieName cf
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> TLS.Context -> PSQL.Connection -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
@@ -306,9 +317,9 @@ internalServerError c err = do
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
   TLS.sendData c $ rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
-listen :: PortID -> (SockAddr -> Handle -> IO ()) -> IO ()
+listen :: PortNumber -> (SockAddr -> Handle -> IO ()) -> IO ()
 listen port f = do
-  s <- listenOn port
+  s <- listenOn (PortNumber port)
   forever $ do
     (clientSocket, addr) <- accept s
     h <- socketToHandle clientSocket ReadWriteMode
