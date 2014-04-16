@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module HTTP (URL, Request(..), Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
+module HTTP (Request(..), Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, take, decimal, hexadecimal)
@@ -19,13 +19,12 @@ import Text.Read (readMaybe)
 
 import Prelude hiding (length, take)
 
-type URL = BS.ByteString
 type Body = BL.ByteString
 type Response = (Status, [Header], Body)
 
 data Request = Request {
   requestMethod :: Method
-, requestURL :: URL
+, requestPath :: BS.ByteString
 , requestHeaders :: [Header]
 , requestBody :: Body
 } deriving (Eq, Show)
@@ -41,7 +40,7 @@ isEndOfLine _    = False
 headerP :: Parser Header
 headerP = (\h v -> (CI.mk h, v)) <$> (takeTill (== ':') <* char ':' <* skipSpace) <*> (takeTill isEndOfLine <* endOfLine)
 
-requestLineP :: Parser (Method, URL)
+requestLineP :: Parser (Method, BS.ByteString)
 requestLineP = (,) <$> (takeTill isSpace <* skipSpace) <*> (takeTill isSpace <* takeTill isEndOfLine <* endOfLine)
 
 responseLineP :: Parser Status
