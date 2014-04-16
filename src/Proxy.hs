@@ -33,7 +33,7 @@ import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
 import qualified Database.PostgreSQL.Simple as PSQL
-import Network (PortID(..), listenOn, connectTo)
+import Network (PortID(..), listenOn, sClose, connectTo)
 import Network.Socket (SockAddr, PortNumber, accept, socketToHandle)
 import qualified Network.Curl as Curl
 import qualified Network.HTTP.Cookie as HTTP
@@ -42,7 +42,7 @@ import qualified Network.HTTP.Types.URI as Query
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
-import Options.Applicative
+import Options.Applicative hiding (action)
 import System.IO
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Log.Logger as Log
@@ -320,12 +320,10 @@ internalServerError send err = do
   send . rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
 listen :: PortNumber -> (SockAddr -> Handle -> IO ()) -> IO ()
-listen port f = do
-  s <- listenOn (PortNumber port)
-  forever $ do
-    (clientSocket, addr) <- accept s
-    h <- socketToHandle clientSocket ReadWriteMode
-    forkIO $ handle logError (f addr h `finally` hClose h)
+listen port action = bracket (listenOn $ PortNumber port) sClose $ \s -> forever $ do
+  (clientSocket, addr) <- accept s
+  h <- socketToHandle clientSocket ReadWriteMode
+  forkIO $ handle logError (action addr h `finally` hClose h)
  where logError :: SomeException -> IO ()
        logError (SomeException e) = log (show (typeOf e) ++ " (" ++ show e ++ ")")
 
