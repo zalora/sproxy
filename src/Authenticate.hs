@@ -20,7 +20,6 @@ import qualified Data.ByteString.Lazy.Char8 as BL8
 import           Data.String.Conversions (cs)
 import           Data.List.Split (splitOn)
 import           Data.Aeson
-import           Network.HTTP.Cookie (Cookie(MkCookie))
 import           Network.HTTP.Types (urlEncode, urlDecode)
 import qualified Network.Curl as Curl
 import qualified Network.URI as URI
@@ -115,7 +114,7 @@ authenticate config send request path code = do
                 Nothing -> internalServerError send "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
-                  let cookie = setCookie (MkCookie cookieDomain cookieName (show clientToken) Nothing Nothing Nothing) authShelfLife
+                  let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
                       resp' = response 302 "Found" [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
                   send $ rawResponse resp'
   where

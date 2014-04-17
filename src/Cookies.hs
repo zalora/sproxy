@@ -14,7 +14,6 @@ import           Control.Applicative
 import qualified Data.ByteString as BS
 import Data.Char hiding (isSpace)
 import Data.List (partition, intercalate)
-import Network.HTTP.Cookie
 import Network.HTTP.Types.Header (Header, hCookie)
 import System.Posix.Types (EpochTime)
 import Data.Attoparsec.ByteString.Char8
@@ -27,10 +26,9 @@ removeCookie name cookies = case partition ((== name) . fst) cookies of
   ((_, x):_, xs) -> Just (x, xs)
   _ -> Nothing
 
-setCookie :: Cookie -> EpochTime -> String
-setCookie cookie maxAge =
-  ckName cookie ++ "=" ++ ckValue cookie ++
-  "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ ckDomain cookie ++ "; HttpOnly; Secure"
+setCookie :: String -> String -> String -> EpochTime -> String
+setCookie domain name value maxAge = name ++ "=" ++ value
+  ++ "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ domain ++ "; HttpOnly; Secure"
 
 formatCookies :: [(Name, Value)] -> BS.ByteString
 formatCookies = mconcat . intercalate ["; "] . map formatCookie
