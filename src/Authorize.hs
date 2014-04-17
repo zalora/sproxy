@@ -25,7 +25,7 @@ type RequestPath = ByteString
 type Group = String
 
 withDatabaseAuthorizeAction :: ByteString -> (AuthorizeAction -> IO a) -> IO a
-withDatabaseAuthorizeAction database action = bracket (PSQL.connectPostgreSQL (database )) (PSQL.close) (\db -> action (authorizedGroups db))
+withDatabaseAuthorizeAction database action = bracket (PSQL.connectPostgreSQL database) PSQL.close (\db -> action (authorizedGroups db))
 
 authorizedGroups :: PSQL.Connection -> AuthorizeAction
 authorizedGroups db email domain path method =

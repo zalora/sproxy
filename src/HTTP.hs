@@ -1,5 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-module HTTP (Request(..), Response, oneRequest, oneResponse, rawRequest, rawResponse, response) where
+module HTTP (
+  Request(..)
+, Response
+, oneRequest
+, oneResponse
+, rawRequest
+, rawResponse
+, response
+
+, internalServerError
+) where
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, take, decimal, hexadecimal)
@@ -19,6 +29,9 @@ import Text.Read (readMaybe)
 
 import Prelude hiding (length, take)
 
+import Type
+import qualified Log
+
 type Body = BL.ByteString
 type Response = (Status, [Header], Body)
 
@@ -28,6 +41,12 @@ data Request = Request {
 , requestHeaders :: [Header]
 , requestBody :: Body
 } deriving (Eq, Show)
+
+internalServerError :: SendData -> String -> IO ()
+internalServerError send err = do
+  Log.debug $ show err
+  -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
+  send . rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
 
 -- These parsers sacrifice correctness for simplicity/speed.
 

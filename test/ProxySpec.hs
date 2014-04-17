@@ -14,6 +14,7 @@ import           Network.Connection
 import           Data.ByteString.Lazy (ByteString)
 
 import           Proxy hiding (run)
+import           Authenticate
 
 main :: IO ()
 main = hspec spec
@@ -34,26 +35,27 @@ spec = do
   describe "runProxy" $ do
     it "forwards requests to backend app" $ do
       Right credential <- TLS.credentialLoadX509 "config/server.crt.example" "config/server.key.example"
+      let config = Config {
+              configTLSCredential = credential
+            , configAuthTokenKey = authTokenKey
+            , configBackendAddress = "127.0.0.1"
+            , configBackendPort = 4061
+            }
       with (run 4061 app) $ do
-        with (startProxy credential) $ do
+        with (startProxy config) $ do
           get "https://localhost:4060" `shouldReturn` "hello"
   where
     with action = bracket (forkIO action) killThread . const
 
-    startProxy credential = runProxy 4060 config credential clientSecret authTokenKey (\action -> action (\_ _ _ _ -> return ["admin"]))
+    startProxy config = runProxy 4060 config authConfig (\action -> action (\_ _ _ _ -> return ["admin"]))
 
     clientSecret = "5i8VKL5PBzDgr5rGm-cg0LuN"
     authTokenKey = "k+ua8EuGyb0rrBV1237I2+ioqtxUOJQ3x3l6JUz/Qu7JaYfA5z0ihnwWLnq8bK+v\nsHuCMgq6R7/f9QuKkpz47DuKdcGNxhFRiL7Ee75gvDzHNTm/IsD43hlJ8ggEaPXW\n7NQFRK19v9H8jyndKxJUWvyPVSwQGIv0JOSS2mXz2/dn8sq1TlVPsIX/VS00VCFm\nya0A7oOJ/cfBz/z0MXvSzg==\n"
 
-    config = ConfigFile {
-        cfCookieDomain = error "cfCookieDomain"
-      , cfCookieName = "sproxy"
-      , cfClientID = error "cfClientID"
-      , cfClientSecretFile = error "cfClientSecretFile"
-      , cfAuthTokenKeyFile = error "cfAuthTokenKeyFile"
-      , cfSslKey = error "cfSslKey"
-      , cfSslCerts = error "cfSslCerts"
-      , cfDatabase = error "cfDatabase"
-      , cfBackendAddress = "127.0.0.1"
-      , cfBackendPort = 4061
+    authConfig = AuthConfig {
+        authConfigCookieDomain = error "authConfigCookieName"
+      , authConfigCookieName = "sproxy"
+      , authConfigClientID = error "authConfigClientID"
+      , authConfigClientSecret = clientSecret
+      , authConfigAuthTokenKey = authTokenKey
       }
