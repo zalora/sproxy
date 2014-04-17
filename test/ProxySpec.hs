@@ -37,7 +37,6 @@ spec = do
       Right credential <- TLS.credentialLoadX509 "config/server.crt.example" "config/server.key.example"
       let config = Config {
               configTLSCredential = credential
-            , configAuthTokenKey = authTokenKey
             , configBackendAddress = "127.0.0.1"
             , configBackendPort = 4061
             }

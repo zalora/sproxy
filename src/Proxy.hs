@@ -94,7 +94,6 @@ instance FromJSON ConfigFile where
 
 data Config = Config {
   configTLSCredential :: TLS.Credential
-, configAuthTokenKey :: String
 , configBackendAddress :: String
 , configBackendPort :: PortNumber
 } deriving (Eq, Show)
@@ -122,7 +121,6 @@ runWithOptions opts = do
             }
           config = Config {
               configTLSCredential = credential
-            , configAuthTokenKey = authTokenKey
             , configBackendAddress = cfBackendAddress cf
             , configBackendPort = fromInteger $ cfBackendPort cf
             }
@@ -156,7 +154,7 @@ redirectToHttps _ h = do
 -- - our authorization
 -- - redirecting requests to localhost:8080
 serve :: Config -> AuthConfig -> WithAuthorizeAction -> SockAddr -> Handle -> IO ()
-serve config@Config{configAuthTokenKey = authTokenKey} authConfig withAuthorizeAction addr h = do
+serve config authConfig withAuthorizeAction addr h = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
@@ -191,7 +189,7 @@ serve config@Config{configAuthTokenKey = authTokenKey} authConfig withAuthorizeA
                     case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
                       Nothing -> redirectForAuth authConfig request send >> go rest
                       Just (authCookie, cookies) -> do
-                        auth <- validAuth authTokenKey authCookie
+                        auth <- validAuth authConfig authCookie
                         case auth of
                           Nothing -> redirectForAuth authConfig request send >> go rest
                           Just token -> do
