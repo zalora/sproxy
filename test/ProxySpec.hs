@@ -11,7 +11,7 @@ import           Control.Exception
 import           Control.Concurrent
 import qualified Network.TLS as TLS
 import           Network.Connection
-import           Data.ByteString.Lazy (ByteString)
+import           Data.ByteString.Lazy (ByteString, fromChunks)
 
 import           Proxy hiding (run)
 import           Authenticate
@@ -19,8 +19,8 @@ import           Authenticate
 main :: IO ()
 main = hspec spec
 
-app :: Application
-app _ = return $ responseLBS status200 [("Content-Type", "text/plain")] "hello"
+app :: ByteString -> Application
+app response _ = return $ responseLBS status200 [("Content-Type", "text/plain")] response
 
 get :: String -> IO ByteString
 get url = do
@@ -31,19 +31,26 @@ get url = do
     tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
 
 spec :: Spec
-spec = do
+spec = around withProxy $ do
   describe "runProxy" $ do
     it "forwards requests to backend app" $ do
+      with (run 4061 $ app "hello") $ do
+        get "https://localhost:4060" `shouldReturn` "hello"
+
+    it "handles chunked response bodies" $ do
+      let response = fromChunks (replicate 2300 "hello")
+      with (run 4061 $ app response) $ do
+        get "https://localhost:4060" `shouldReturn` response
+  where
+    withProxy action = do
       Right credential <- TLS.credentialLoadX509 "config/server.crt.example" "config/server.key.example"
       let config = Config {
               configTLSCredential = credential
             , configBackendAddress = "127.0.0.1"
             , configBackendPort = 4061
             }
-      with (run 4061 app) $ do
-        with (startProxy config) $ do
-          get "https://localhost:4060" `shouldReturn` "hello"
-  where
+      with (startProxy config) action
+
     with action = bracket (forkIO action) killThread . const
 
     startProxy config = runProxy 4060 config authConfig (\action -> action (\_ _ _ _ -> return ["admin"]))
