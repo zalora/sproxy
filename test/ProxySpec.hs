@@ -4,7 +4,7 @@ module ProxySpec (main, spec) where
 import           Test.Hspec
 import           Network.HTTP.Conduit
 import           Network.Wai (Application, responseLBS)
-import           Network.HTTP.Types (status200)
+import           Network.HTTP.Types (Header, status200)
 import           Network.Wai.Handler.Warp (run)
 import           Control.Applicative
 import           Control.Exception
@@ -19,8 +19,8 @@ import           Authenticate
 main :: IO ()
 main = hspec spec
 
-app :: ByteString -> Application
-app response _ = return $ responseLBS status200 [("Content-Type", "text/plain")] response
+app :: [Header] -> ByteString -> Application
+app headers response _ = return $ responseLBS status200 (("Content-Type", "text/plain") : headers) response
 
 get :: String -> IO ByteString
 get url = do
@@ -34,13 +34,17 @@ spec :: Spec
 spec = around withProxy $ do
   describe "runProxy" $ do
     it "forwards requests to backend app" $ do
-      with (run 4061 $ app "hello") $ do
+      with (run 4061 $ app [] "hello") $ do
         get "https://localhost:4060" `shouldReturn` "hello"
 
     it "handles chunked response bodies" $ do
       let response = fromChunks (replicate 2300 "hello")
-      with (run 4061 $ app response) $ do
+      with (run 4061 $ app [] response) $ do
         get "https://localhost:4060" `shouldReturn` response
+
+    it "handles response bodies with Content-Length" $ do
+      with (run 4061 $ app [("Content-Length", "5")] "hello") $ do
+        get "https://localhost:4060" `shouldReturn` "hello"
   where
     withProxy action = do
       Right credential <- TLS.credentialLoadX509 "config/server.crt.example" "config/server.key.example"
