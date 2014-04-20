@@ -6,7 +6,7 @@ module HTTP (
 , oneResponse
 , rawRequest
 , rawResponse
-, response
+, mkResponse
 
 , internalServerError
 ) where
@@ -46,7 +46,7 @@ internalServerError :: SendData -> String -> IO ()
 internalServerError send err = do
   Log.debug $ show err
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
-  send . rawResponse $ response 500 "Internal Server Error" [] "Internal Server Error"
+  send . rawResponse $ mkResponse 500 "Internal Server Error" [] "Internal Server Error"
 
 -- These parsers sacrifice correctness for simplicity/speed.
 
@@ -123,5 +123,5 @@ headerBS :: Header -> BS.ByteString
 headerBS (k, v) = CI.original k `BS.append` ": " `BS.append` v `BS.append` "\r\n"
 
 -- convenience responses
-response :: Int -> BS.ByteString -> [Header] -> BL.ByteString -> Response
-response code message headers body = (mkStatus code message, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)
+mkResponse :: Int -> BS.ByteString -> [Header] -> BL.ByteString -> Response
+mkResponse code message headers body = (mkStatus code message, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)
