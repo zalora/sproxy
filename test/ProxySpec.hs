@@ -27,9 +27,9 @@ main :: IO ()
 main = hspec spec
 
 chunkedRequestBody :: [ByteString] -> RequestBody
-chunkedRequestBody chunks = RequestBodyStreamChunked . (>>=) $ do
+chunkedRequestBody chunks = RequestBodyStreamChunked $ \action -> do
   ref <- newIORef chunks
-  return $ atomicModifyIORef ref $ \xs -> case xs of
+  action $ atomicModifyIORef ref $ \xs -> case xs of
     y : ys -> (ys, y)
     _ -> (xs, "")
 
