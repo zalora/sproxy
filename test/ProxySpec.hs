@@ -42,21 +42,26 @@ backendMock headers response mvar request = do
 authTokenKey :: String
 authTokenKey = "some-secret"
 
-performRequest :: (Request -> Request) -> IO L.ByteString
+performRequest :: (Request -> Request) -> IO (Response L.ByteString)
 performRequest f = do
   manager <- newManager (mkManagerSettings tlsSettings Nothing)
-  cookie <- show <$> authToken authTokenKey "me@example.com" ("John", "Doe")
-  request <- (setSproxyCookie cookie . f) <$> parseUrl "https://localhost:4060"
-  responseBody <$> httpLbs request manager
+  request <- f <$> parseUrl "https://localhost:4060"
+  httpLbs request{redirectCount = 0, checkStatus = \_ _ _ -> Nothing} manager
   where
     tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
+
+performRequestWithCookie :: (Request -> Request) -> IO L.ByteString
+performRequestWithCookie f = do
+  cookie <- show <$> authToken authTokenKey "me@example.com" ("John", "Doe")
+  responseBody <$> performRequest (setSproxyCookie cookie . f)
+  where
     setSproxyCookie cookie r = r {requestHeaders = ("Cookie", fromString $ "sproxy=" ++ cookie) : requestHeaders r}
 
 get :: IO L.ByteString
-get = performRequest id
+get = performRequestWithCookie id
 
 post :: RequestBody -> IO L.ByteString
-post body = performRequest $ \r -> r {method = "POST", requestBody = body}
+post body = performRequestWithCookie $ \r -> r {method = "POST", requestBody = body}
 
 spec :: Spec
 spec = around withProxy $ do
@@ -88,6 +93,13 @@ spec = around withProxy $ do
         request <- readMVar mvar
         (lookup "Content-Length" $ fst request) `shouldBe` Just "3"
         snd request `shouldBe` ["foo"]
+
+    context "when user does not send cookie" $ do
+      it "redirects user to Google OAuth page" $ do
+        withBackendMock [] "hello" $ \_ -> do
+          r <- performRequest id
+          responseStatus r `shouldBe` found302
+          lookup "Location" (responseHeaders r) `shouldBe` Just "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2F&redirect_uri=https://localhost:4060/&response_type=code&client_id=some-client-id&approval_prompt=force&access_type=offline"
   where
     withProxy :: IO a -> IO a
     withProxy action = do
@@ -114,7 +126,7 @@ spec = around withProxy $ do
     authConfig = AuthConfig {
         authConfigCookieDomain = error "authConfigCookieName"
       , authConfigCookieName = "sproxy"
-      , authConfigClientID = error "authConfigClientID"
+      , authConfigClientID = "some-client-id"
       , authConfigClientSecret = error "authConfigClientSecret"
       , authConfigAuthTokenKey = authTokenKey
       }
