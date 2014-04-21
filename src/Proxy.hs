@@ -23,8 +23,7 @@ import qualified Data.X509 as X509
 import Data.Yaml
 import Network (PortID(..), listenOn, sClose, connectTo)
 import Network.Socket (SockAddr, PortNumber, accept, socketToHandle)
-import Network.HTTP.Types (hCookie)
-import qualified Network.HTTP.Types.URI as Query
+import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
@@ -138,7 +137,7 @@ redirectToHttps _ h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
-    (Just request, _) -> BL.hPutStr h $ rawResponse $ mkResponse 303 "See Other" [("Location", cs $ show $ requestURI request)] ""
+    (Just request, _) -> BL.hPutStr h $ rawResponse $ mkResponse seeOther303 [("Location", cs $ show $ requestURI request)] ""
   where
     requestURI (Request _ path headers _) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
@@ -175,7 +174,7 @@ serve config authConfig withAuthorizeAction addr h = do
             case URI.parseURIReference $ BU.toString url of
               Nothing -> internalServerError send "Failed to parse request URI" >> go rest
               Just uri -> do
-                let query = Query.parseQuery $ BU.fromString $ URI.uriQuery uri
+                let query = parseQuery $ BU.fromString $ URI.uriQuery uri
                 -- This isn't a perfect test, but it's perfect for testing.
                 case (lookup "state" query, lookup "code" query) of
                   (Just (Just path), Just (Just code)) -> do
@@ -200,7 +199,7 @@ forwardRequest config send authorize cookies addr (Request method path headers b
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            send . rawResponse $ mkResponse 403 "Forbidden" [] "Access Denied"
+            send . rawResponse $ mkResponse forbidden403 [] "Access Denied"
             return True
         _ -> do
             -- TODO: Reuse connections to the backend server.
