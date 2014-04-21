@@ -33,8 +33,8 @@ chunkedRequestBody chunks = RequestBodyStreamChunked $ \action -> do
     y : ys -> (ys, y)
     _ -> (xs, "")
 
-app :: [Header] -> L.ByteString -> MVar (RequestHeaders, [ByteString]) -> Application
-app headers response mvar request = do
+backendMock :: [Header] -> L.ByteString -> MVar (RequestHeaders, [ByteString]) -> Application
+backendMock headers response mvar request = do
   body <- Wai.requestBody request $$ CL.consume
   putMVar mvar (Wai.requestHeaders request, body)
   return $ Wai.responseLBS status200 (("Content-Type", "text/plain") : headers) response
@@ -62,20 +62,20 @@ spec :: Spec
 spec = around withProxy $ do
   describe "runProxy" $ do
     it "forwards requests to backend app" $ do
-      withApp [] "hello" $ \_ -> do
+      withBackendMock [] "hello" $ \_ -> do
         get `shouldReturn` "hello"
 
     it "handles chunked response bodies" $ do
       let response = L.fromChunks (replicate 2300 "hello")
-      withApp [] response $ \_ -> do
+      withBackendMock [] response $ \_ -> do
         get `shouldReturn` response
 
     it "handles response bodies with Content-Length" $ do
-      withApp [("Content-Length", "5")] "hello"$ \_ -> do
+      withBackendMock [("Content-Length", "5")] "hello"$ \_ -> do
         get `shouldReturn` "hello"
 
     it "handles chunked request bodies" $ do
-      withApp [] "" $ \mvar -> do
+      withBackendMock [] "" $ \mvar -> do
         let body = ["foo", "bar", "baz"]
         _ <- post (chunkedRequestBody body)
         request <- readMVar mvar
@@ -83,12 +83,13 @@ spec = around withProxy $ do
         snd request `shouldBe` body
 
     it "handles request bodies with Content-Length" $ do
-      withApp [] "" $ \mvar -> do
+      withBackendMock [] "" $ \mvar -> do
         _ <- post (RequestBodyBS "foo")
         request <- readMVar mvar
         (lookup "Content-Length" $ fst request) `shouldBe` Just "3"
         snd request `shouldBe` ["foo"]
   where
+    withProxy :: IO a -> IO a
     withProxy action = do
       Right credential <- TLS.credentialLoadX509 "config/server.crt.example" "config/server.key.example"
       let config = Config {
@@ -96,13 +97,17 @@ spec = around withProxy $ do
             , configBackendAddress = "127.0.0.1"
             , configBackendPort = 4061
             }
-      with (startProxy config) action
+      withService (startProxy config) action
 
-    with action = bracket (forkIO action) killThread . const
+    -- Start a service and run an action while the service is running;
+    -- terminate service after action has completed.
+    withService :: IO () -> IO a -> IO a
+    withService service action = bracket (forkIO service) killThread (\_ -> action)
 
-    withApp headers response action = do
+    withBackendMock :: [Header] -> L.ByteString -> (MVar (RequestHeaders, [ByteString]) -> IO ()) -> IO ()
+    withBackendMock mockedHeaders mockedBody clientAction = do
       mvar <- newEmptyMVar
-      with (Warp.run 4061 $ app headers response mvar) (action mvar)
+      withService (Warp.run 4061 $ backendMock mockedHeaders mockedBody mvar) (clientAction mvar)
 
     startProxy config = runProxy 4060 config authConfig (\action -> action (\_ _ _ _ -> return ["admin"]))
 
