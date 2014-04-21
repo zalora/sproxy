@@ -21,9 +21,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.CaseInsensitive as CI
 import Data.String.Conversions (cs)
-import Network.HTTP.Types.Header (Header)
-import Network.HTTP.Types.Method (Method)
-import Network.HTTP.Types.Status (Status(..), mkStatus)
+import Network.HTTP.Types
 import Numeric (showHex)
 import Text.Read (readMaybe)
 
@@ -46,7 +44,7 @@ internalServerError :: SendData -> String -> IO ()
 internalServerError send err = do
   Log.debug $ show err
   -- I wonder why Firefox fails to parse this correctly without a Content-Length header?
-  send . rawResponse $ mkResponse 500 "Internal Server Error" [] "Internal Server Error"
+  send . rawResponse $ mkResponse internalServerError500 [] "Internal Server Error"
 
 -- These parsers sacrifice correctness for simplicity/speed.
 
@@ -123,5 +121,5 @@ headerBS :: Header -> BS.ByteString
 headerBS (k, v) = CI.original k `BS.append` ": " `BS.append` v `BS.append` "\r\n"
 
 -- convenience responses
-mkResponse :: Int -> BS.ByteString -> [Header] -> BL.ByteString -> Response
-mkResponse code message headers body = (mkStatus code message, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)
+mkResponse :: Status -> [Header] -> BL.ByteString -> Response
+mkResponse status headers body = (status, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)
