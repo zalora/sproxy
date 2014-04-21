@@ -40,15 +40,7 @@ import Cookies
 import HTTP
 import Authorize
 
-
--- Note that this is always used for redirects and hence always uses https:
-requestURI :: Request -> URI.URI
-requestURI (Request _ path headers _) =
-  let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
-  in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
-
 -- * command line options
-
 data SProxyApp = SProxyApp {
   appConfigFile :: FilePath
 }
@@ -146,7 +138,11 @@ redirectToHttps _ h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
-    (Just request, _) -> BL.hPutStr h $ rawResponse $ response 303 "See Other" [("Location", cs $ show $ requestURI request)] ""
+    (Just request, _) -> BL.hPutStr h $ rawResponse $ mkResponse 303 "See Other" [("Location", cs $ show $ requestURI request)] ""
+  where
+    requestURI (Request _ path headers _) =
+      let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
+      in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
 
 -- | Actual server:
 -- - ssl handshake
@@ -204,7 +200,7 @@ forwardRequest config send authorize cookies addr (Request method path headers b
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            send . rawResponse $ response 403 "Forbidden" [] "Access Denied"
+            send . rawResponse $ mkResponse 403 "Forbidden" [] "Access Denied"
             return True
         _ -> do
             -- TODO: Reuse connections to the backend server.
