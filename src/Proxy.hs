@@ -22,7 +22,7 @@ import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
 import Network (PortID(..), listenOn, sClose, connectTo)
-import Network.Socket (SockAddr, PortNumber, accept, socketToHandle)
+import Network.Socket (Socket, SockAddr, PortNumber, accept, socketToHandle, close)
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
@@ -132,8 +132,9 @@ runProxy :: PortNumber -> Config -> AuthConfig -> WithAuthorizeAction -> IO ()
 runProxy port config authConfig authorize = (listen port (serve config authConfig authorize))
 
 -- | Redirects requests to https.
-redirectToHttps :: SockAddr -> Handle -> IO ()
-redirectToHttps _ h = do
+redirectToHttps :: SockAddr -> Socket -> IO ()
+redirectToHttps _ sock = do
+  h <- socketToHandle sock ReadWriteMode
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
@@ -148,14 +149,14 @@ redirectToHttps _ h = do
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> AuthConfig -> WithAuthorizeAction -> SockAddr -> Handle -> IO ()
-serve config authConfig withAuthorizeAction addr h = do
+serve :: Config -> AuthConfig -> WithAuthorizeAction -> SockAddr -> Socket -> IO ()
+serve config authConfig withAuthorizeAction addr sock = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
                    , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS10, TLS.TLS11, TLS.TLS12]
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
-  ctx <- TLS.contextNew h params rng
+  ctx <- TLS.contextNew sock params rng
   TLS.handshake ctx
   input <- tlsGetContents ctx
   withAuthorizeAction $ do
@@ -230,11 +231,10 @@ forwardRequest config send authorize cookies addr (Request method path headers b
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
 
-listen :: PortNumber -> (SockAddr -> Handle -> IO ()) -> IO ()
-listen port action = bracket (listenOn $ PortNumber port) sClose $ \s -> forever $ do
-  (clientSocket, addr) <- accept s
-  h <- socketToHandle clientSocket ReadWriteMode
-  forkIO $ handle logError (action addr h `finally` hClose h)
+listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
+listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
+  (sock, addr) <- accept serverSock
+  forkIO $ handle logError (action addr sock `finally` close sock)
  where logError :: SomeException -> IO ()
        logError (SomeException e) = Log.debug (show (typeOf e) ++ " (" ++ show e ++ ")")
 
