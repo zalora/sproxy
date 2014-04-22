@@ -15,10 +15,11 @@ import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.Attoparsec.ByteString.Char8 (Parser, char, skipSpace, isSpace, endOfLine, takeTill, take, decimal, hexadecimal)
 import Data.Attoparsec.ByteString.Lazy (parse, Result(..))
 import Data.Attoparsec.Combinator (manyTill)
-import qualified Data.ByteString as BS
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.UTF8 as BU
+import qualified Data.ByteString.UTF8 as UTF8
 import qualified Data.CaseInsensitive as CI
 import Data.String.Conversions (cs)
 import Network.HTTP.Types
@@ -35,7 +36,7 @@ type Response = (Status, [Header], Body)
 
 data Request = Request {
   requestMethod :: Method
-, requestPath :: BS.ByteString
+, requestPath :: ByteString
 , requestHeaders :: [Header]
 , requestBody :: Body
 } deriving (Eq, Show)
@@ -56,18 +57,18 @@ isEndOfLine _    = False
 headerP :: Parser Header
 headerP = (\h v -> (CI.mk h, v)) <$> (takeTill (== ':') <* char ':' <* skipSpace) <*> (takeTill isEndOfLine <* endOfLine)
 
-requestLineP :: Parser (Method, BS.ByteString)
+requestLineP :: Parser (Method, ByteString)
 requestLineP = (,) <$> (takeTill isSpace <* skipSpace) <*> (takeTill isSpace <* takeTill isEndOfLine <* endOfLine)
 
 responseLineP :: Parser Status
 responseLineP = mkStatus <$> ((takeTill isSpace <* skipSpace) *> (decimal <* skipSpace)) <*> (takeTill isEndOfLine <* endOfLine)
 
-chunkP :: Parser (Int, BS.ByteString)
+chunkP :: Parser (Int, ByteString)
 chunkP = do
   length <- hexadecimal
   extensions <- takeTill isEndOfLine -- Ignore chunked extensions.
   chunk <- take (length + 4) -- + 4 is to catch the preceeding and trailing \r\n
-  return $ (length, cs (showHex length "") `BS.append` extensions `BS.append` chunk)
+  return $ (length, cs (showHex length "") `B.append` extensions `B.append` chunk)
 
 oneRequest :: BL.ByteString -> (Maybe Request, BL.ByteString)
 oneRequest s = case parse ((,) <$> requestLineP <*> manyTill headerP endOfLine) s of
@@ -114,12 +115,15 @@ rawRequest (Request method url headers body) =
 
 rawResponse :: Response -> BL.ByteString
 rawResponse (status, headers, body) =
-  BL.fromChunks (["HTTP/1.1 ", BU.fromString $ show (statusCode status), " ", statusMessage status, "\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
+  BL.fromChunks ([statusLine status, "\r\n"] ++ map headerBS headers ++ ["\r\n"]) `BL.append` body
 
-headerBS :: Header -> BS.ByteString
-headerBS (k, v) = CI.original k `BS.append` ": " `BS.append` v `BS.append` "\r\n"
+statusLine :: Status -> ByteString
+statusLine status = B.concat ["HTTP/1.1 ", UTF8.fromString $ show (statusCode status), " ", statusMessage status]
+
+headerBS :: Header -> ByteString
+headerBS (k, v) = CI.original k `B.append` ": " `B.append` v `B.append` "\r\n"
 
 sendResponse :: SendData -> Status -> [Header] -> BL.ByteString -> IO ()
 sendResponse send status headers body = send $ rawResponse $ response
   where
-    response = (status, headers ++ [("Content-Length", BU.fromString $ show $ BL.length body)], body)
+    response = (status, headers ++ [("Content-Length", UTF8.fromString $ show $ BL.length body)], body)
