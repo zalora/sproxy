@@ -97,7 +97,7 @@ redirectForAuth c request send = do
   let redirectUri = rootURI request
       path = urlEncode True (requestPath request)
       authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
-  send . rawResponse $ mkResponse found302 [("Location", UTF8.fromString $ authURL)] ""
+  sendResponse send found302 [("Location", UTF8.fromString $ authURL)] ""
 
 authenticate :: AuthConfig -> SendData -> Request -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
@@ -118,8 +118,7 @@ authenticate config send request path code = do
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
-                      resp' = mkResponse found302 [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
-                  send $ rawResponse resp'
+                  sendResponse send found302 [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config

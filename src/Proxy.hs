@@ -137,7 +137,7 @@ redirectToHttps _ h = do
   input <- BL.hGetContents h
   case oneRequest input of
     (Nothing, _) -> return ()
-    (Just request, _) -> BL.hPutStr h $ rawResponse $ mkResponse seeOther303 [("Location", cs $ show $ requestURI request)] ""
+    (Just request, _) -> sendResponse (BL.hPutStr h) seeOther303 [("Location", cs $ show $ requestURI request)] ""
   where
     requestURI (Request _ path headers _) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
@@ -199,11 +199,11 @@ forwardRequest config send authorize cookies addr (Request method path headers b
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            send . rawResponse $ mkResponse forbidden403 [] "Access Denied"
+            sendResponse send forbidden403 [] "Access Denied"
             return True
         _ -> do
             -- TODO: Reuse connections to the backend server.
-            h <- connectTo (configBackendAddress config) (PortNumber $ configBackendPort config)
+            h <- connectTo host port
             let downStreamHeaders =
                     toList $
                     insert "From" (cs $ authEmail token) $
@@ -224,6 +224,8 @@ forwardRequest config send authorize cookies addr (Request method path headers b
             hClose h
             return continue
   where
+    host = configBackendAddress config
+    port = PortNumber (configBackendPort config)
     setCookies = case cookies of
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
