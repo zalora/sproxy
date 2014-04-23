@@ -30,6 +30,9 @@ import           System.Posix.Types (EpochTime)
 import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
 
+import           Network.HTTP.Toolkit.Header
+import           Network.HTTP.Toolkit.Request
+
 import           Type
 import           Cookies
 import           HTTP
@@ -87,19 +90,19 @@ instance FromJSON UserInfo where
 
 -- https://wiki.zalora.com/Main_Page -> https://wiki.zalora.com/
 -- Note that this always uses https:
-rootURI :: Request -> URI.URI
-rootURI (Request _ _ headers _) =
+rootURI :: RequestHeader -> URI.URI
+rootURI (MessageHeader _ headers) =
   let host = cs $ fromMaybe (error "Host header not found") $ lookup "Host" headers
   in URI.URI "https:" (Just $ URI.URIAuth "" host "") "/" "" ""
 
-redirectForAuth :: AuthConfig -> Request -> SendData -> IO ()
-redirectForAuth c request send = do
+redirectForAuth :: AuthConfig -> RequestHeader -> SendData -> IO ()
+redirectForAuth c request@(MessageHeader (_, path_) _) send = do
   let redirectUri = rootURI request
-      path = urlEncode True (requestPath request)
+      path = urlEncode True path_
       authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
   sendResponse send found302 [("Location", UTF8.fromString $ authURL)] ""
 
-authenticate :: AuthConfig -> SendData -> Request -> ByteString -> ByteString -> IO ()
+authenticate :: AuthConfig -> SendData -> RequestHeader -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ UTF8.toString code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
   case tokenRes of

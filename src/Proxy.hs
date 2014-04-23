@@ -10,8 +10,9 @@ module Proxy (
 import Control.Concurrent (forkIO)
 import Control.Exception
 import Data.Typeable (typeOf)
-import Control.Monad (forever, liftM, when)
+import Control.Monad (forever, liftM)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
+import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)
@@ -22,14 +23,20 @@ import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Data.Yaml
 import Network (PortID(..), listenOn, sClose, connectTo)
-import Network.Socket (Socket, SockAddr, PortNumber, accept, socketToHandle, close)
+import Network.Socket (Socket, SockAddr, PortNumber, accept, close)
+import qualified Network.Socket.ByteString as Socket
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import qualified Network.URI as URI
 import Options.Applicative hiding (action)
 import System.IO
-import System.IO.Unsafe (unsafeInterleaveIO)
+
+import Network.HTTP.Toolkit.Body
+import Network.HTTP.Toolkit.Header
+import Network.HTTP.Toolkit.Connection
+import Network.HTTP.Toolkit.Request
+import Network.HTTP.Toolkit.Response
 
 import Type
 import Util
@@ -134,13 +141,11 @@ runProxy port config authConfig authorize = (listen port (serve config authConfi
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
-  h <- socketToHandle sock ReadWriteMode
-  input <- BL.hGetContents h
-  case oneRequest input of
-    (Nothing, _) -> return ()
-    (Just request, _) -> sendResponse (BL.hPutStr h) seeOther303 [("Location", cs $ show $ requestURI request)] ""
+  conn <- makeConnection (Socket.recv sock 4096)
+  (request, _) <- readRequest conn
+  sendResponse (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
   where
-    requestURI (Request _ path headers _) =
+    requestURI (MessageHeader (_, path) headers) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
       in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
 
@@ -158,53 +163,48 @@ serve config authConfig withAuthorizeAction addr sock = do
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
   ctx <- TLS.contextNew sock params rng
   TLS.handshake ctx
-  input <- tlsGetContents ctx
-  withAuthorizeAction $ do
-    \authorize -> serve_ (TLS.sendData ctx) authorize input
+  conn <- makeConnection (TLS.recvData ctx)
+  withAuthorizeAction $ serve_ (TLS.sendData ctx . BL.fromStrict) conn
   TLS.bye ctx
   where
-    serve_ :: SendData -> AuthorizeAction -> BL.ByteString -> IO ()
-    serve_ send authorize = go
+    serve_ :: SendData -> Connection -> AuthorizeAction -> IO ()
+    serve_ send conn authorize = go
       where
-        go :: BL.ByteString -> IO ()
-        go input = case oneRequest input of
-          (Nothing, _) -> return () -- no more requests
-          (Just request@(Request _ url headers _), rest) -> do
+        go :: IO ()
+        go = forever $ readRequest conn >>= \(request, body) -> case request of
+          MessageHeader (_, url) headers -> do
             -- TODO: Don't loop for more input on Connection: close header.
             -- Check if this is an authorization response.
             case URI.parseURIReference $ BU.toString url of
-              Nothing -> internalServerError send "Failed to parse request URI" >> go rest
+              Nothing -> internalServerError send "Failed to parse request URI"
               Just uri -> do
                 let query = parseQuery $ BU.fromString $ URI.uriQuery uri
                 -- This isn't a perfect test, but it's perfect for testing.
                 case (lookup "state" query, lookup "code" query) of
                   (Just (Just path), Just (Just code)) -> do
-                    authenticate authConfig send request path code >> go rest
+                    authenticate authConfig send request path code
                   _ -> do
                     -- Check for an auth cookie.
                     case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                      Nothing -> redirectForAuth authConfig request send >> go rest
+                      Nothing -> redirectForAuth authConfig request send
                       Just (authCookie, cookies) -> do
                         auth <- validAuth authConfig authCookie
                         case auth of
-                          Nothing -> redirectForAuth authConfig request send >> go rest
+                          Nothing -> redirectForAuth authConfig request send
                           Just token -> do
-                            continue <- forwardRequest config send authorize cookies addr request token
-                            when continue $ go rest
+                            forwardRequest config send authorize cookies addr request body token
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request -> AuthToken -> IO Bool
-forwardRequest config send authorize cookies addr (Request method path headers body) token = do
+forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> RequestHeader -> BodyReader -> AuthToken -> IO ()
+forwardRequest config send authorize cookies addr (MessageHeader (method, path) headers) body token = do
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
             sendResponse send forbidden403 [] "Access Denied"
-            return True
         _ -> do
             -- TODO: Reuse connections to the backend server.
-            h <- connectTo host port
             let downStreamHeaders =
                     toList $
                     insert "From" (cs $ authEmail token) $
@@ -215,15 +215,11 @@ forwardRequest config send authorize cookies addr (Request method path headers b
                     insert "Connection" "close" $
                     setCookies $
                     fromList headers
-            BL.hPutStr h $ rawRequest (Request method path downStreamHeaders body)
-            input <- BL.hGetContents h
-            continue <- case oneResponse input of
-                (Nothing, _) -> return False
-                (Just (status, headers_, body_), _) -> do
-                    send $ rawResponse (status, removeConnectionHeader headers_, body_)
-                    return True
-            hClose h
-            return continue
+            bracket (connectTo host port) hClose $ \h -> do
+              sendRequest (B.hPutStr h) method path downStreamHeaders body
+              conn <- makeConnection (B.hGetSome h 4096)
+              (MessageHeader status responseHeaders, responseBody) <- readResponse method conn
+              sendResponse_ send status (removeConnectionHeader responseHeaders) responseBody
   where
     host = configBackendAddress config
     port = PortNumber (configBackendPort config)
@@ -237,13 +233,3 @@ listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -
   forkIO $ handle logError (action addr sock `finally` close sock)
  where logError :: SomeException -> IO ()
        logError (SomeException e) = Log.debug (show (typeOf e) ++ " (" ++ show e ++ ")")
-
--- Lazily read everything from a TLS context. Note that we don't check
--- for EOF and instead let termination throw an exception.
-tlsGetContents :: TLS.Context -> IO BL.ByteString
-tlsGetContents ctx = fmap BL.fromChunks lazyRead
- where lazyRead = unsafeInterleaveIO loop
-       loop = do
-         x <- TLS.recvData ctx
-         xs <- lazyRead
-         return (x:xs)

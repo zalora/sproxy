@@ -1,5 +1,5 @@
 module Type where
 
-import qualified Data.ByteString.Lazy as BL
+import           Data.ByteString (ByteString)
 
-type SendData = BL.ByteString -> IO ()
+type SendData = ByteString -> IO ()
