@@ -7,7 +7,7 @@ import Network.Wai.Handler.Warp (run)
 
 app :: Application
 app _ = do
-  return $ responseLBS status200 [("Content-Type", "text/plain")] "hello"
+  return $ responseLBS status200 [("Content-Type", "text/plain")] "hello\n"
 
 main :: IO ()
 main = run 8080 app
