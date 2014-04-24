@@ -32,11 +32,7 @@ import qualified Network.URI as URI
 import Options.Applicative hiding (action)
 import System.IO
 
-import Network.HTTP.Toolkit.Body
-import Network.HTTP.Toolkit.Header
-import Network.HTTP.Toolkit.Connection
-import Network.HTTP.Toolkit.Request
-import Network.HTTP.Toolkit.Response
+import Network.HTTP.Toolkit
 
 import Type
 import Util
@@ -142,10 +138,10 @@ runProxy port config authConfig authorize = (listen port (serve config authConfi
 redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
   conn <- makeConnection (Socket.recv sock 4096)
-  (request, _) <- readRequest conn
-  sendResponse (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
+  request <- readRequest conn
+  sendResponse_ (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
   where
-    requestURI (MessageHeader (_, path) headers) =
+    requestURI (Request _ path headers _) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
       in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
 
@@ -171,8 +167,8 @@ serve config authConfig withAuthorizeAction addr sock = do
     serve_ send conn authorize = go
       where
         go :: IO ()
-        go = forever $ readRequest conn >>= \(request, body) -> case request of
-          MessageHeader (_, url) headers -> do
+        go = forever $ readRequest conn >>= \request -> case request of
+          Request _ url headers _ -> do
             -- TODO: Don't loop for more input on Connection: close header.
             -- Check if this is an authorization response.
             case URI.parseURIReference $ BU.toString url of
@@ -192,17 +188,17 @@ serve config authConfig withAuthorizeAction addr sock = do
                         case auth of
                           Nothing -> redirectForAuth authConfig request send
                           Just token -> do
-                            forwardRequest config send authorize cookies addr request body token
+                            forwardRequest config send authorize cookies addr request token
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> RequestHeader -> BodyReader -> AuthToken -> IO ()
-forwardRequest config send authorize cookies addr (MessageHeader (method, path) headers) body token = do
+forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
+forwardRequest config send authorize cookies addr request@(Request method path headers _) token = do
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            sendResponse send forbidden403 [] "Access Denied"
+            sendResponse_ send forbidden403 [] "Access Denied"
         _ -> do
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
@@ -216,10 +212,10 @@ forwardRequest config send authorize cookies addr (MessageHeader (method, path) 
                     setCookies $
                     fromList headers
             bracket (connectTo host port) hClose $ \h -> do
-              sendRequest (B.hPutStr h) method path downStreamHeaders body
-              conn <- makeConnection (B.hGetSome h 4096)
-              (MessageHeader status responseHeaders, responseBody) <- readResponse method conn
-              sendResponse_ send status (removeConnectionHeader responseHeaders) responseBody
+              sendRequest (B.hPutStr h) request{requestHeaders = downStreamHeaders}
+              conn <- connectionFromHandle h
+              response <- readResponse method conn
+              sendResponse send response{responseHeaders = removeConnectionHeader (responseHeaders response)}
   where
     host = configBackendAddress config
     port = PortNumber (configBackendPort config)
