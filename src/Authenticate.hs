@@ -30,8 +30,7 @@ import           System.Posix.Types (EpochTime)
 import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
 
-import           Network.HTTP.Toolkit.Header
-import           Network.HTTP.Toolkit.Request
+import           Network.HTTP.Toolkit
 
 import           Type
 import           Cookies
@@ -90,19 +89,19 @@ instance FromJSON UserInfo where
 
 -- https://wiki.zalora.com/Main_Page -> https://wiki.zalora.com/
 -- Note that this always uses https:
-rootURI :: RequestHeader -> URI.URI
-rootURI (MessageHeader _ headers) =
+rootURI :: Request a -> URI.URI
+rootURI (Request _ _ headers _) =
   let host = cs $ fromMaybe (error "Host header not found") $ lookup "Host" headers
   in URI.URI "https:" (Just $ URI.URIAuth "" host "") "/" "" ""
 
-redirectForAuth :: AuthConfig -> RequestHeader -> SendData -> IO ()
-redirectForAuth c request@(MessageHeader (_, path_) _) send = do
+redirectForAuth :: AuthConfig -> Request a -> SendData -> IO ()
+redirectForAuth c request@(Request _ path_ _ _) send = do
   let redirectUri = rootURI request
       path = urlEncode True path_
       authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
-  sendResponse send found302 [("Location", UTF8.fromString $ authURL)] ""
+  sendResponse_ send found302 [("Location", UTF8.fromString $ authURL)] ""
 
-authenticate :: AuthConfig -> SendData -> RequestHeader -> ByteString -> ByteString -> IO ()
+authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ UTF8.toString code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
   case tokenRes of
@@ -121,7 +120,7 @@ authenticate config send request path code = do
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
-                  sendResponse send found302 [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
+                  sendResponse_ send found302 [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
