@@ -139,7 +139,7 @@ redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
   conn <- makeConnection (Socket.recv sock 4096)
   request <- readRequest conn
-  sendResponse_ (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
+  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
   where
     requestURI (Request _ path headers _) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
@@ -198,7 +198,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
     case groups of
         [] -> do
             -- TODO: Send back a page that allows the user to request authorization.
-            sendResponse_ send forbidden403 [] "Access Denied"
+            simpleResponse send forbidden403 [] "Access Denied"
         _ -> do
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
