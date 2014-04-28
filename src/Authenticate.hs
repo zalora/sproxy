@@ -98,12 +98,12 @@ redirectForAuth :: AuthConfig -> Request a -> SendData -> IO ()
 redirectForAuth c request@(Request _ path_ _ _) send = do
   let redirectUri = rootURI request
       path = urlEncode True path_
-      authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (cs $ show $ redirectUri) ++ "&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
+      authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (show $ redirectUri) ++ "oauth2callback&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
   simpleResponse send found302 [("Location", UTF8.fromString $ authURL)] ""
 
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
-  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ UTF8.toString code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (cs $ show $ rootURI request), "grant_type=authorization_code"]
+  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ UTF8.toString code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (show $ rootURI request) ++ "oauth2callback", "grant_type=authorization_code"]
   case tokenRes of
     Left err -> internalServerError send err
     Right resp -> do

@@ -176,8 +176,8 @@ serve config authConfig withAuthorizeAction addr sock = do
               Just uri -> do
                 let query = parseQuery $ BU.fromString $ URI.uriQuery uri
                 -- This isn't a perfect test, but it's perfect for testing.
-                case (lookup "state" query, lookup "code" query) of
-                  (Just (Just path), Just (Just code)) -> do
+                case (URI.uriPath uri, lookup "state" query, lookup "code" query) of
+                  ("/oauth2callback", Just (Just path), Just (Just code)) -> do
                     authenticate authConfig send request path code
                   _ -> do
                     -- Check for an auth cookie.
