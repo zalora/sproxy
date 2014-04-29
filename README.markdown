@@ -94,5 +94,5 @@ Make a request to <https://dev.zalora.com/>.
 ### Troubleshooting
 
 If you already have a cookie for `.zalora.com` sproxy gets confused and you
-will repeatedly be redirect to Google's sign-in page.  Delete that cookie to
+will repeatedly be redirected to Google's sign-in page.  Delete that cookie to
 resolve this.
