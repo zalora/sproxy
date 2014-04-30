@@ -15,8 +15,9 @@ module Authenticate (
 
 import           Control.Applicative
 import           Text.Read (readMaybe)
-import           Data.Maybe
+import           Data.Monoid
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.UTF8 as UTF8
 import qualified Data.ByteString.Lazy.UTF8 as LazyUTF8
 import qualified Data.ByteString.Lazy.Char8 as BL8
@@ -25,7 +26,6 @@ import           Data.List.Split (splitOn)
 import           Data.Aeson
 import           Network.HTTP.Types
 import qualified Network.Curl as Curl
-import qualified Network.URI as URI
 import           System.Posix.Types (EpochTime)
 import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
@@ -87,23 +87,27 @@ instance FromJSON UserInfo where
     <*> v .: "family_name"
   parseJSON _ = empty
 
--- https://wiki.zalora.com/Main_Page -> https://wiki.zalora.com/
--- Note that this always uses https:
-rootURI :: Request a -> URI.URI
-rootURI (Request _ _ headers _) =
-  let host = cs $ fromMaybe (error "Host header not found") $ lookup "Host" headers
-  in URI.URI "https:" (Just $ URI.URIAuth "" host "") "/" "" ""
+baseUri :: Request a -> ByteString
+baseUri (Request _ _ headers _) = maybe (error "Host header not found") ("https://" <>) (lookup "Host" headers)
+
+redirectUri :: Request a -> ByteString
+redirectUri request = baseUri request <> "/oauth2callback"
+
+authUrl :: ByteString -> Request a -> AuthConfig -> ByteString
+authUrl path request c = mconcat [
+    "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&"
+  , "state=", urlEncode True path
+  , "&redirect_uri=", redirectUri request
+  , "&response_type=code&client_id=", B8.pack (authConfigClientID c)
+  , "&approval_prompt=force&access_type=offline"
+  ]
 
 redirectForAuth :: AuthConfig -> Request a -> SendData -> IO ()
-redirectForAuth c request@(Request _ path_ _ _) send = do
-  let redirectUri = rootURI request
-      path = urlEncode True path_
-      authURL = "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=" ++ cs path ++ "&redirect_uri=" ++ (show $ redirectUri) ++ "oauth2callback&response_type=code&client_id=" ++ authConfigClientID c ++ "&approval_prompt=force&access_type=offline"
-  simpleResponse send found302 [("Location", UTF8.fromString $ authURL)] ""
+redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found302 [("Location", authUrl path request c)] ""
 
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
-  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ UTF8.toString code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ (show $ rootURI request) ++ "oauth2callback", "grant_type=authorization_code"]
+  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ cs code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ cs (redirectUri request), "grant_type=authorization_code"]
   case tokenRes of
     Left err -> internalServerError send err
     Right resp -> do
@@ -120,7 +124,7 @@ authenticate config send request path code = do
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
-                  simpleResponse send found302 [("Location", cs $ (show $ (rootURI request) {URI.uriPath = ""}) ++ cs (urlDecode False path)), ("Set-Cookie", UTF8.fromString cookie)] ""
+                  simpleResponse send found302 [("Location", baseUri request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
