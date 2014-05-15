@@ -17,7 +17,7 @@ executable sproxy
   hs-source-dirs:      src
   other-modules:       Cookies,
                        HTTP
-  build-depends:       aeson,
+  build-depends:       aeson >= 0.7.0.4,
                        attoparsec,
                        base >=4.6 && <4.7,
                        bytestring,
