@@ -99,7 +99,7 @@ spec = around withProxy $ do
         withBackendMock [] "hello" $ \_ -> do
           r <- performRequest id
           responseStatus r `shouldBe` found302
-          lookup "Location" (responseHeaders r) `shouldBe` Just "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2F&redirect_uri=https://localhost:4060/&response_type=code&client_id=some-client-id&approval_prompt=force&access_type=offline"
+          lookup "Location" (responseHeaders r) `shouldBe` Just "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2F&redirect_uri=https://localhost:4060/oauth2callback&response_type=code&client_id=some-client-id&approval_prompt=force&access_type=offline"
   where
     withProxy :: IO a -> IO a
     withProxy action = do

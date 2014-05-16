@@ -56,7 +56,7 @@ Create a project in the [Google Developers Console](https://console.developers.g
  - visit *APIs & auth* -> *Credentials*
  - select *CREATE NEW CLIENT ID*
  - use `https://dev.zalora.com` as *Authorized JavaScript origins*
- - use `https://dev.zalora.com/` as *Authorized redirect URI*
+ - leave *Authorized redirect URI* to `https://dev.zalora.com/oauth2callback`
 
 Put the `Client ID` in `config/sproxy.yml` and the `Client secret` in a file
 called `config/client_secret`.
