@@ -29,7 +29,7 @@ executable sproxy
                        curl,
                        data-default,
                        hslogger,
-                       http-types,
+                       http-types >= 0.8.5,
                        interpolatedstring-perl6,
                        mtl,
                        network,

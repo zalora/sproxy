@@ -13,7 +13,6 @@ import Data.Typeable (typeOf)
 import Control.Monad (forever, liftM)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.ByteString as B
-import qualified Data.ByteString.UTF8 as BU
 import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)
 import Data.List (intercalate)
@@ -28,7 +27,6 @@ import qualified Network.Socket.ByteString as Socket
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
-import qualified Network.URI as URI
 import Options.Applicative hiding (action)
 import System.IO
 
@@ -39,7 +37,6 @@ import Util
 import qualified Log
 import Authenticate
 import Cookies
-import HTTP
 import Authorize
 
 -- * command line options
@@ -139,11 +136,11 @@ redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
   conn <- makeConnection (Socket.recv sock 4096)
   request <- readRequest conn
-  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", cs $ show $ requestURI request)] ""
+  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", requestURI request)] ""
   where
     requestURI (Request _ path headers _) =
       let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
-      in fromJust $ URI.parseURI $ "https://" ++ cs host ++ cs path
+      in "https://" <> host <> path
 
 -- | Actual server:
 -- - ssl handshake
@@ -168,27 +165,23 @@ serve config authConfig withAuthorizeAction addr sock = do
       where
         go :: IO ()
         go = forever $ readRequest conn >>= \request -> case request of
-          Request _ url headers _ -> do
+          Request _ p headers _ -> do
             -- TODO: Don't loop for more input on Connection: close header.
             -- Check if this is an authorization response.
-            case URI.parseURIReference $ BU.toString url of
-              Nothing -> internalServerError send "Failed to parse request URI"
-              Just uri -> do
-                let query = parseQuery $ BU.fromString $ URI.uriQuery uri
-                -- This isn't a perfect test, but it's perfect for testing.
-                case (URI.uriPath uri, lookup "state" query, lookup "code" query) of
-                  ("/oauth2callback", Just (Just path), Just (Just code)) -> do
-                    authenticate authConfig send request path code
-                  _ -> do
-                    -- Check for an auth cookie.
-                    case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
+            let (segments, query) = (decodePath . extractPath) p
+            case (segments, lookup "state" query, lookup "code" query) of
+              (["oauth2callback"], Just (Just path), Just (Just code)) -> do
+                authenticate authConfig send request path code
+              _ -> do
+                -- Check for an auth cookie.
+                case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
+                  Nothing -> redirectForAuth authConfig request send
+                  Just (authCookie, cookies) -> do
+                    auth <- validAuth authConfig authCookie
+                    case auth of
                       Nothing -> redirectForAuth authConfig request send
-                      Just (authCookie, cookies) -> do
-                        auth <- validAuth authConfig authCookie
-                        case auth of
-                          Nothing -> redirectForAuth authConfig request send
-                          Just token -> do
-                            forwardRequest config send authorize cookies addr request token
+                      Just token -> do
+                        forwardRequest config send authorize cookies addr request token
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
