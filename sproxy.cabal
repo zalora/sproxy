@@ -10,7 +10,7 @@ maintainer:          jekor@jekor.com
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
-data-files:          module.nix, sproxy.sql
+data-files:          sproxy.sql
 
 executable sproxy
   main-is:             Main.hs
