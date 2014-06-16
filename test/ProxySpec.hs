@@ -14,8 +14,6 @@ import           Network.HTTP.Types
 import           Network.Wai (Application)
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
-import           Data.Conduit
-import qualified Data.Conduit.List as CL
 import           Network.HTTP.Conduit
 import qualified Network.TLS as TLS
 import           Network.Connection
@@ -34,10 +32,20 @@ chunkedRequestBody chunks = RequestBodyStreamChunked $ \action -> do
     _ -> (xs, "")
 
 backendMock :: [Header] -> L.ByteString -> MVar (RequestHeaders, [ByteString]) -> Application
-backendMock headers response mvar request = do
-  body <- Wai.requestBody request $$ CL.consume
+backendMock headers response mvar request respond = do
+  body <- consumeBody (Wai.requestBody request)
   putMVar mvar (Wai.requestHeaders request, body)
-  return $ Wai.responseLBS status200 (("Content-Type", "text/plain") : headers) response
+  respond $ Wai.responseLBS status200 (("Content-Type", "text/plain") : headers) response
+
+consumeBody :: IO ByteString -> IO [ByteString]
+consumeBody bodyReader = go
+  where
+    go :: IO [ByteString]
+    go = do
+      bs <- bodyReader
+      case bs of
+        "" -> return []
+        _ -> (bs:) <$> go
 
 authTokenKey :: String
 authTokenKey = "some-secret"
