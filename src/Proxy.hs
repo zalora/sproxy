@@ -134,8 +134,8 @@ runProxy port config authConfig authorize = (listen port (serve config authConfi
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
-  conn <- makeConnection (Socket.recv sock 4096)
-  request <- readRequest conn
+  conn <- makeInputStream (Socket.recv sock 4096)
+  request <- readRequest True conn
   simpleResponse (Socket.sendAll sock) seeOther303 [("Location", requestURI request)] ""
   where
     requestURI (Request _ path headers _) =
@@ -156,15 +156,15 @@ serve config authConfig withAuthorizeAction addr sock = do
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
   ctx <- TLS.contextNew sock params rng
   TLS.handshake ctx
-  conn <- makeConnection (TLS.recvData ctx)
+  conn <- makeInputStream (TLS.recvData ctx)
   withAuthorizeAction $ serve_ (TLS.sendData ctx . BL.fromStrict) conn
   TLS.bye ctx
   where
-    serve_ :: SendData -> Connection -> AuthorizeAction -> IO ()
+    serve_ :: SendData -> InputStream -> AuthorizeAction -> IO ()
     serve_ send conn authorize = go
       where
         go :: IO ()
-        go = forever $ readRequest conn >>= \request -> case request of
+        go = forever $ readRequest True conn >>= \request -> case request of
           Request _ p headers _ -> do
             -- TODO: Don't loop for more input on Connection: close header.
             -- Check if this is an authorization response.
@@ -206,8 +206,8 @@ forwardRequest config send authorize cookies addr request@(Request method path h
                     fromList headers
             bracket (connectTo host port) hClose $ \h -> do
               sendRequest (B.hPutStr h) request{requestHeaders = downStreamHeaders}
-              conn <- connectionFromHandle h
-              response <- readResponse method conn
+              conn <- inputStreamFromHandle h
+              response <- readResponse True method conn
               sendResponse send response{responseHeaders = removeConnectionHeader (responseHeaders response)}
   where
     host = configBackendAddress config
