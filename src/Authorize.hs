@@ -1,7 +1,6 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Authorize (
-  WithAuthorizeAction
-, AuthorizeAction
+  AuthorizeAction
 , Email
 , Domain
 , RequestPath
@@ -15,8 +14,9 @@ import           Data.ByteString (ByteString)
 import           Network.HTTP.Types
 import           Text.InterpolatedString.Perl6 (q)
 import qualified Database.PostgreSQL.Simple as PSQL
+import           Data.Pool
+import           Data.Time.Clock
 
-type WithAuthorizeAction = (AuthorizeAction -> IO ()) -> IO ()
 type AuthorizeAction = Email -> Domain -> RequestPath -> Method -> IO [Group]
 
 type Email = String
@@ -24,8 +24,20 @@ type Domain = ByteString
 type RequestPath = ByteString
 type Group = String
 
+withConnectionPool :: ByteString -> (Pool PSQL.Connection -> IO a) -> IO a
+withConnectionPool database = bracket (createPool (PSQL.connectPostgreSQL database) PSQL.close 1 connectionIdleTime connectionPoolSize) destroyAllResources
+  where
+    connectionPoolSize :: Int
+    connectionPoolSize = 5
+
+    connectionIdleTime :: NominalDiffTime
+    connectionIdleTime = 5
+
 withDatabaseAuthorizeAction :: ByteString -> (AuthorizeAction -> IO a) -> IO a
-withDatabaseAuthorizeAction database action = bracket (PSQL.connectPostgreSQL database) PSQL.close (\db -> action (authorizedGroups db))
+withDatabaseAuthorizeAction database action = withConnectionPool database $ \pool -> do
+  let authorizeAction :: AuthorizeAction
+      authorizeAction domain email path method = withResource pool $ \conn -> authorizedGroups conn domain email path method
+  action authorizeAction
 
 authorizedGroups :: PSQL.Connection -> AuthorizeAction
 authorizedGroups db email domain path method =
