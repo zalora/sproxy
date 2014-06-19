@@ -39,19 +39,16 @@ import Authenticate
 import Cookies
 import Authorize
 
--- * command line options
-data SProxyApp = SProxyApp {
-  appConfigFile :: FilePath
-}
-
 run :: IO ()
 run = execParser opts >>= runWithOptions
   where
-    parser = SProxyApp <$> strOption (long "config" <>
-                                      noArgError ShowHelpText <>
-                                      metavar "CONFIG" <>
-                                      value "config/sproxy.yml" <>
-                                      help "config file path")
+    parser = strOption (
+         long "config"
+      <> noArgError ShowHelpText
+      <> metavar "CONFIG"
+      <> value "config/sproxy.yml"
+      <> help "config file path"
+      )
     opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
 
 
@@ -91,13 +88,12 @@ data Config = Config {
 
 -- | Reads the configuration file and the ssl certificate files and starts
 -- the server
-runWithOptions :: SProxyApp -> IO ()
-runWithOptions opts = do
+runWithOptions :: FilePath -> IO ()
+runWithOptions configFile = do
   Log.setup
-  config' :: Either ParseException ConfigFile <- decodeFileEither (appConfigFile opts)
+  config' :: Either ParseException ConfigFile <- decodeFileEither configFile
   case config' of
-    Left err -> Log.debug $ ("error parsing configuration file " ++
-        appConfigFile opts ++ ": " ++ show err)
+    Left err -> Log.debug $ ("error parsing configuration file " ++ configFile ++ ": " ++ show err)
     Right cf -> do
       clientSecret <- strip <$> readFile (cfClientSecretFile cf)
       authTokenKey <- readFile (cfAuthTokenKeyFile cf)
