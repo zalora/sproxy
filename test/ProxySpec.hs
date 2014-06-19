@@ -129,7 +129,7 @@ spec = around withProxy $ do
       mvar <- newEmptyMVar
       withService (Warp.run 4061 $ backendMock mockedHeaders mockedBody mvar) (clientAction mvar)
 
-    startProxy config = runProxy 4060 config authConfig (\action -> action (\_ _ _ _ -> return ["admin"]))
+    startProxy config = runProxy 4060 config authConfig (\_ _ _ _ -> return ["admin"])
 
     authConfig = AuthConfig {
         authConfigCookieDomain = error "authConfigCookieName"

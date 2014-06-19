@@ -118,8 +118,9 @@ runWithOptions opts = do
 
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
+      _ <- forkIO $ withDatabaseAuthorizeAction (cs $ cfDatabase cf) $ \authorize -> do
+        handle handleError (runProxy 443 config authConfig authorize)
 
-      _ <- forkIO (handle handleError (runProxy 443 config authConfig (withDatabaseAuthorizeAction . cs $ cfDatabase cf)))
       -- Listen on port 80 just to redirect everything to HTTPS.
       handle handleError (listen 80 redirectToHttps)
  where handleError :: SomeException -> IO ()
@@ -128,7 +129,7 @@ runWithOptions opts = do
        -- but the tls library expects them in the opposite order.
        reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
-runProxy :: PortNumber -> Config -> AuthConfig -> WithAuthorizeAction -> IO ()
+runProxy :: PortNumber -> Config -> AuthConfig -> AuthorizeAction -> IO ()
 runProxy port config authConfig authorize = (listen port (serve config authConfig authorize))
 
 -- | Redirects requests to https.
@@ -147,8 +148,8 @@ redirectToHttps _ sock = do
 -- - google authentication
 -- - our authorization
 -- - redirecting requests to localhost:8080
-serve :: Config -> AuthConfig -> WithAuthorizeAction -> SockAddr -> Socket -> IO ()
-serve config authConfig withAuthorizeAction addr sock = do
+serve :: Config -> AuthConfig -> AuthorizeAction -> SockAddr -> Socket -> IO ()
+serve config authConfig authorize addr sock = do
   rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
@@ -157,11 +158,11 @@ serve config authConfig withAuthorizeAction addr sock = do
   ctx <- TLS.contextNew sock params rng
   TLS.handshake ctx
   conn <- makeInputStream (TLS.recvData ctx)
-  withAuthorizeAction $ serve_ (TLS.sendData ctx . BL.fromStrict) conn
+  serve_ (TLS.sendData ctx . BL.fromStrict) conn
   TLS.bye ctx
   where
-    serve_ :: SendData -> InputStream -> AuthorizeAction -> IO ()
-    serve_ send conn authorize = go
+    serve_ :: SendData -> InputStream -> IO ()
+    serve_ send conn = go
       where
         go :: IO ()
         go = forever $ readRequest True conn >>= \request -> case request of
