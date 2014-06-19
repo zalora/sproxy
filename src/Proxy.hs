@@ -47,8 +47,8 @@ data Config = Config {
 
 -- | Reads the configuration file and the ssl certificate files and starts
 -- the server
-run :: ConfigFile -> IO ()
-run cf = do
+run :: ConfigFile -> AuthorizeAction -> IO ()
+run cf authorize = do
   Log.setup
   clientSecret <- strip <$> readFile (cfClientSecretFile cf)
   authTokenKey <- readFile (cfAuthTokenKeyFile cf)
@@ -69,8 +69,7 @@ run cf = do
 
   -- Immediately fork a new thread for accepting connections since
   -- the main thread is special and expensive to communicate with.
-  _ <- forkIO $ withDatabaseAuthorizeAction (cfDatabase cf) $ \authorize -> do
-    handle handleError (runProxy 443 config authConfig authorize)
+  _ <- forkIO $ handle handleError (runProxy 443 config authConfig authorize)
 
   -- Listen on port 80 just to redirect everything to HTTPS.
   handle handleError (listen 80 redirectToHttps)

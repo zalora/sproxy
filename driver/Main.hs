@@ -2,13 +2,13 @@ module Main where
 
 import           Options.Applicative
 
-import           Proxy
-import           ConfigFile
+import           Network.HTTP.SProxy
 
 main :: IO ()
 main = do
   configFile <- execParser options
-  withConfigFile configFile run
+  withConfigFile configFile $ \config ->
+    withDatabaseAuthorizeAction (cfDatabase config) (run config)
   where
     parser = strOption (
          long "config"
