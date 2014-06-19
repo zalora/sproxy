@@ -92,7 +92,7 @@ test-suite spec
 
                        hspec >= 1.5,
                        http-conduit,
-                       wai >= 3,
-                       warp,
+                       wai >= 3.0.0.2,
+                       warp >= 3.0.0.3,
                        connection
   default-language:    Haskell2010
