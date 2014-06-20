@@ -114,7 +114,7 @@ runWithOptions configFile = do
 
       -- Immediately fork a new thread for accepting connections since
       -- the main thread is special and expensive to communicate with.
-      _ <- forkIO $ withDatabaseAuthorizeAction (cs $ cfDatabase cf) $ \authorize -> do
+      _ <- forkIO $ withDatabaseAuthorizeAction (cfDatabase cf) $ \authorize -> do
         handle handleError (runProxy 443 config authConfig authorize)
 
       -- Listen on port 80 just to redirect everything to HTTPS.

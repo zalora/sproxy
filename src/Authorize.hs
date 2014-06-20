@@ -13,9 +13,10 @@ import           Control.Exception
 import           Data.ByteString (ByteString)
 import           Network.HTTP.Types
 import           Text.InterpolatedString.Perl6 (q)
-import qualified Database.PostgreSQL.Simple as PSQL
+import           Database.PostgreSQL.Simple
 import           Data.Pool
 import           Data.Time.Clock
+import           Data.String.Conversions (cs)
 
 type AuthorizeAction = Email -> Domain -> RequestPath -> Method -> IO [Group]
 
@@ -24,24 +25,35 @@ type Domain = ByteString
 type RequestPath = ByteString
 type Group = String
 
-withConnectionPool :: ByteString -> (Pool PSQL.Connection -> IO a) -> IO a
-withConnectionPool database = bracket (createPool (PSQL.connectPostgreSQL database) PSQL.close 1 connectionIdleTime connectionPoolSize) destroyAllResources
+type ConnectionPool = Pool Connection
+
+createConnectionPool :: String -> IO ConnectionPool
+createConnectionPool database = createPool open close 1 connectionIdleTime connectionPoolSize
   where
+    open :: IO Connection
+    open = connectPostgreSQL (cs database)
+
     connectionPoolSize :: Int
     connectionPoolSize = 5
 
     connectionIdleTime :: NominalDiffTime
     connectionIdleTime = 5
 
-withDatabaseAuthorizeAction :: ByteString -> (AuthorizeAction -> IO a) -> IO a
+destroyConnectionPool :: ConnectionPool -> IO ()
+destroyConnectionPool = destroyAllResources
+
+withConnectionPool :: String -> (ConnectionPool -> IO a) -> IO a
+withConnectionPool database = bracket (createConnectionPool database) destroyConnectionPool
+
+withDatabaseAuthorizeAction :: String -> (AuthorizeAction -> IO a) -> IO a
 withDatabaseAuthorizeAction database action = withConnectionPool database $ \pool -> do
   let authorizeAction :: AuthorizeAction
       authorizeAction domain email path method = withResource pool $ \conn -> authorizedGroups conn domain email path method
   action authorizeAction
 
-authorizedGroups :: PSQL.Connection -> AuthorizeAction
+authorizedGroups :: Connection -> AuthorizeAction
 authorizedGroups db email domain path method =
-  (fmap PSQL.fromOnly) `fmap` PSQL.query db [q|
+  (fmap fromOnly) `fmap` query db [q|
 SELECT gp."group" FROM group_privilege gp
 INNER JOIN group_member gm ON gm."group" = gp."group"
 INNER JOIN "group" g ON gp."group" = g."group"
