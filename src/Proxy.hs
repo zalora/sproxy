@@ -7,8 +7,10 @@ module Proxy (
 , runProxy
 ) where
 
+import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Exception
+import Data.Monoid
 import Data.Typeable (typeOf)
 import Control.Monad (forever, liftM)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
@@ -20,65 +22,22 @@ import Data.Maybe
 import Data.Map as Map (fromList, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
-import Data.Yaml
 import Network (PortID(..), listenOn, sClose, connectTo)
 import Network.Socket (Socket, SockAddr, PortNumber, accept, close)
 import qualified Network.Socket.ByteString as Socket
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
-import Options.Applicative hiding (action)
 import System.IO
 
 import Network.HTTP.Toolkit
-
 import Type
 import Util
 import qualified Log
 import Authenticate
 import Cookies
 import Authorize
-
-run :: IO ()
-run = execParser opts >>= runWithOptions
-  where
-    parser = strOption (
-         long "config"
-      <> noArgError ShowHelpText
-      <> metavar "CONFIG"
-      <> value "config/sproxy.yml"
-      <> help "config file path"
-      )
-    opts = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
-
-
--- * main functionality
-data ConfigFile = ConfigFile {
-  cfCookieDomain :: String
-, cfCookieName :: String
-, cfClientID :: String
-, cfClientSecretFile :: FilePath
-, cfAuthTokenKeyFile :: FilePath
-, cfSslKey :: FilePath
-, cfSslCerts :: FilePath
-, cfDatabase :: String
-, cfBackendAddress :: String
-, cfBackendPort :: Integer
-} deriving Show
-
-instance FromJSON ConfigFile where
-  parseJSON (Object m) = ConfigFile
-    <$> m .: "cookie_domain"
-    <*> m .: "cookie_name"
-    <*> m .: "client_id"
-    <*> m .: "client_secret"
-    <*> m .: "auth_token_key"
-    <*> m .: "ssl_key"
-    <*> m .: "ssl_certs"
-    <*> m .: "database"
-    <*> m .: "backend_address"
-    <*> m .: "backend_port"
-  parseJSON _ = empty
+import ConfigFile
 
 data Config = Config {
   configTLSCredential :: TLS.Credential
@@ -88,37 +47,33 @@ data Config = Config {
 
 -- | Reads the configuration file and the ssl certificate files and starts
 -- the server
-runWithOptions :: FilePath -> IO ()
-runWithOptions configFile = do
+run :: ConfigFile -> IO ()
+run cf = do
   Log.setup
-  config' :: Either ParseException ConfigFile <- decodeFileEither configFile
-  case config' of
-    Left err -> Log.debug $ ("error parsing configuration file " ++ configFile ++ ": " ++ show err)
-    Right cf -> do
-      clientSecret <- strip <$> readFile (cfClientSecretFile cf)
-      authTokenKey <- readFile (cfAuthTokenKeyFile cf)
-      credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
+  clientSecret <- strip <$> readFile (cfClientSecretFile cf)
+  authTokenKey <- readFile (cfAuthTokenKeyFile cf)
+  credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
 
-      let authConfig = AuthConfig {
-              authConfigCookieDomain = cfCookieDomain cf
-            , authConfigCookieName = cfCookieName cf
-            , authConfigClientID = cfClientID cf
-            , authConfigClientSecret = clientSecret
-            , authConfigAuthTokenKey = authTokenKey
-            }
-          config = Config {
-              configTLSCredential = credential
-            , configBackendAddress = cfBackendAddress cf
-            , configBackendPort = fromInteger $ cfBackendPort cf
-            }
+  let authConfig = AuthConfig {
+          authConfigCookieDomain = cfCookieDomain cf
+        , authConfigCookieName = cfCookieName cf
+        , authConfigClientID = cfClientID cf
+        , authConfigClientSecret = clientSecret
+        , authConfigAuthTokenKey = authTokenKey
+        }
+      config = Config {
+          configTLSCredential = credential
+        , configBackendAddress = cfBackendAddress cf
+        , configBackendPort = fromInteger $ cfBackendPort cf
+        }
 
-      -- Immediately fork a new thread for accepting connections since
-      -- the main thread is special and expensive to communicate with.
-      _ <- forkIO $ withDatabaseAuthorizeAction (cfDatabase cf) $ \authorize -> do
-        handle handleError (runProxy 443 config authConfig authorize)
+  -- Immediately fork a new thread for accepting connections since
+  -- the main thread is special and expensive to communicate with.
+  _ <- forkIO $ withDatabaseAuthorizeAction (cfDatabase cf) $ \authorize -> do
+    handle handleError (runProxy 443 config authConfig authorize)
 
-      -- Listen on port 80 just to redirect everything to HTTPS.
-      handle handleError (listen 80 redirectToHttps)
+  -- Listen on port 80 just to redirect everything to HTTPS.
+  handle handleError (listen 80 redirectToHttps)
  where handleError :: SomeException -> IO ()
        handleError e = Log.debug $ show e
        -- Usually combined certs are in server, intermediate order,
