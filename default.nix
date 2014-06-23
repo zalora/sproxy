@@ -3,5 +3,15 @@
 }:
 
 {
-  build = pkgs.haskellPackages.buildLocalCabal src "sproxy";
+  build = pkgs.haskellPackages.buildLocalCabalWithArgs {
+    inherit src;
+    name = "sproxy";
+    cabalDrvArgs = {
+        postInstall = ''
+            source ${pkgs.makeWrapper}/nix-support/setup-hook
+            wrapProgram $out/bin/sproxy \
+            --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.gcc.gcc}/lib64
+        '';
+    };
+  };
 }
