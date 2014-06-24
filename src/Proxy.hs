@@ -123,6 +123,8 @@ serve config authConfig authorize addr sock = do
             case (segments, lookup "state" query, lookup "code" query) of
               (["oauth2callback"], Just (Just path), Just (Just code)) -> do
                 authenticate authConfig send request path code
+              (["oauth2callback", "logout"], _, _) ->
+                logout authConfig send request
               _ -> do
                 -- Check for an auth cookie.
                 case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of

@@ -6,6 +6,7 @@ module Cookies (
 , removeCookie
 , formatCookies
 , setCookie
+, invalidateCookie
 ) where
 
 import           Data.Monoid
@@ -29,6 +30,10 @@ removeCookie name cookies = case partition ((== name) . fst) cookies of
 setCookie :: String -> String -> String -> EpochTime -> String
 setCookie domain name value maxAge = name ++ "=" ++ value
   ++ "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ domain ++ "; HttpOnly; Secure"
+
+invalidateCookie :: String -> String -> String
+invalidateCookie domain name =
+  name ++ "=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=" ++ domain ++ "; HttpOnly; Secure"
 
 formatCookies :: [(Name, Value)] -> BS.ByteString
 formatCookies = mconcat . intercalate ["; "] . map formatCookie

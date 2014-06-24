@@ -10,6 +10,14 @@ main = hspec spec
 
 spec :: Spec
 spec = do
+  describe "setCookie" $ do
+    it "sets a cookie" $ do
+      setCookie "example.com" "sproxy" "foo" (30 * 24 * 60 * 60) `shouldBe` "sproxy=foo; Max-Age=2592000; Domain=example.com; HttpOnly; Secure"
+
+  describe "invalidateCookie" $ do
+    it "invalidates a cookie" $ do
+      invalidateCookie "example.com" "sproxy" `shouldBe` "sproxy=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=example.com; HttpOnly; Secure"
+
   describe "formatCookies" $ do
     it "formats a given list of cookies" $ do
       formatCookies [("foo", "23"), ("bar", "42")] `shouldBe` "foo=23; bar=42"

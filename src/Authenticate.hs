@@ -5,6 +5,7 @@ module Authenticate (
 , validAuth
 , redirectForAuth
 , authenticate
+, logout
 
 -- exported to silence warnings
 , AccessToken(..)
@@ -131,6 +132,14 @@ authenticate config send request path code = do
     clientID = authConfigClientID config
     clientSecret = authConfigClientSecret config
     authTokenKey = authConfigAuthTokenKey config
+
+logout :: AuthConfig -> SendData -> Request a -> IO ()
+logout config send request = do
+  let cookie = invalidateCookie cookieDomain cookieName
+  simpleResponse send found302 [("Location", baseUri request), ("Set-Cookie", UTF8.fromString cookie)] ""
+  where
+    cookieDomain = authConfigCookieDomain config
+    cookieName = authConfigCookieName config
 
 curl :: Curl.URLString -> [Curl.CurlOption] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
 curl url options = Curl.withCurlDo $ do
