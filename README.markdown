@@ -27,6 +27,14 @@ From that point on, when sproxy detects a valid session cookie it extracts the
 email, checks it against the access rules, and relays the request to the
 back-end server (if allowed).
 
+## Logout
+
+Hitting the endpoint `/oauth2callback/logout` will invalidate the session
+cookie and session.  The user will be redirected to `/` after logout.  The
+query parameter `state` can be provided to specify an alternate redirect path
+(the path has to be percent-encoded, e.g. with `urlEncode` from
+`Network.HTTP.Types.URI`).
+
 ## Permissions system
 
 Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
