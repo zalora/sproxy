@@ -28,12 +28,28 @@ removeCookie name cookies = case partition ((== name) . fst) cookies of
   _ -> Nothing
 
 setCookie :: String -> String -> String -> EpochTime -> String
-setCookie domain name value maxAge = name ++ "=" ++ value
-  ++ "; path=/; Max-Age=" ++ show maxAge ++ "; Domain=" ++ domain ++ "; HttpOnly; Secure"
+setCookie domain name value maxAge = mkCookie domain [
+    (name, value)
+  , ("Max-Age", show maxAge)
+  ]
 
 invalidateCookie :: String -> String -> String
-invalidateCookie domain name =
-  name ++ "=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=" ++ domain ++ "; HttpOnly; Secure"
+invalidateCookie domain name = mkCookie domain [
+    (name, "deleted")
+  , ("expires", "Thu, 01 Jan 1970 00:00:00 GMT")
+  ]
+
+mkCookie :: String -> [(String, String)] -> String
+mkCookie domain = intercalate "; " . map format . (++ defaults) . map (fmap Just)
+  where
+    defaults = [
+        ("Domain", Just domain)
+      , ("path", Just "/")
+      , ("HttpOnly", Nothing)
+      , ("Secure", Nothing)
+      ]
+    format (name, mValue) = maybe name (\value -> name ++ "=" ++ value) mValue
+
 
 formatCookies :: [(Name, Value)] -> BS.ByteString
 formatCookies = mconcat . intercalate ["; "] . map formatCookie

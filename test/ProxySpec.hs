@@ -9,6 +9,7 @@ import           Control.Concurrent
 import           Data.IORef
 import           Data.String
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
 import           Network.HTTP.Types
 import           Network.Wai (Application)
@@ -113,7 +114,14 @@ spec = around withProxy $ do
       it "invalidates session cookie" $ do
         withBackendMock [] "hello" $ \_ -> do
           r <- performRequestWithCookie (\r -> r{path = "/sproxy/logout"})
-          lookup "Set-Cookie" (responseHeaders r) `shouldBe` Just "sproxy=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=example.com; HttpOnly; Secure"
+          lookup "Set-Cookie" (responseHeaders r) `shouldBe` (Just . B.unwords) [
+              "sproxy=deleted;"
+            , "expires=Thu, 01 Jan 1970 00:00:00 GMT;"
+            , "Domain=example.com;"
+            , "path=/;"
+            , "HttpOnly;"
+            , "Secure"
+            ]
 
       it "redirects user to /" $ do
         withBackendMock [] "hello" $ \_ -> do
