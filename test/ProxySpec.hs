@@ -58,18 +58,18 @@ performRequest f = do
   where
     tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
 
-performRequestWithCookie :: (Request -> Request) -> IO L.ByteString
+performRequestWithCookie :: (Request -> Request) -> IO (Response L.ByteString)
 performRequestWithCookie f = do
   cookie <- show <$> authToken authTokenKey "me@example.com" ("John", "Doe")
-  responseBody <$> performRequest (setSproxyCookie cookie . f)
+  performRequest (setSproxyCookie cookie . f)
   where
     setSproxyCookie cookie r = r {requestHeaders = ("Cookie", fromString $ "sproxy=" ++ cookie) : requestHeaders r}
 
 get :: IO L.ByteString
-get = performRequestWithCookie id
+get = responseBody <$> performRequestWithCookie id
 
 post :: RequestBody -> IO L.ByteString
-post body = performRequestWithCookie $ \r -> r {method = "POST", requestBody = body}
+post body = responseBody <$> performRequestWithCookie (\r -> r {method = "POST", requestBody = body})
 
 spec :: Spec
 spec = around withProxy $ do
@@ -108,6 +108,25 @@ spec = around withProxy $ do
           r <- performRequest id
           responseStatus r `shouldBe` found302
           lookup "Location" (responseHeaders r) `shouldBe` Just "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=%2F&redirect_uri=https://localhost:4060/oauth2callback&response_type=code&client_id=some-client-id&approval_prompt=force&access_type=offline"
+
+    describe "/oauth2callback/logout" $ do
+      it "invalidates session cookie" $ do
+        withBackendMock [] "hello" $ \_ -> do
+          r <- performRequestWithCookie (\r -> r{path = "/oauth2callback/logout"})
+          lookup "Set-Cookie" (responseHeaders r) `shouldBe` Just "sproxy=deleted; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=example.com; HttpOnly; Secure"
+
+      it "redirects user to /" $ do
+        withBackendMock [] "hello" $ \_ -> do
+          r <- performRequestWithCookie (\r -> r{path = "/oauth2callback/logout"})
+          responseStatus r `shouldBe` found302
+          lookup "Location" (responseHeaders r) `shouldBe` Just "https://localhost:4060/"
+
+      context "when alternate redirect path is specified" $ do
+        it "redirects user to specified path" $ do
+          withBackendMock [] "hello" $ \_ -> do
+            r <- performRequestWithCookie (\r -> r{path = "/oauth2callback/logout?state=%2Ffoo%2Fbar%3Ftest%3D23"})
+            responseStatus r `shouldBe` found302
+            lookup "Location" (responseHeaders r) `shouldBe` Just "https://localhost:4060/foo/bar?test=23"
   where
     withProxy :: IO a -> IO a
     withProxy action = do
@@ -132,7 +151,7 @@ spec = around withProxy $ do
     startProxy config = runProxy 4060 config authConfig (\_ _ _ _ -> return ["admin"])
 
     authConfig = AuthConfig {
-        authConfigCookieDomain = error "authConfigCookieName"
+        authConfigCookieDomain = "example.com"
       , authConfigCookieName = "sproxy"
       , authConfigClientID = "some-client-id"
       , authConfigClientSecret = error "authConfigClientSecret"
