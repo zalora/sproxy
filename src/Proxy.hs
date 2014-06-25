@@ -8,11 +8,11 @@ module Proxy (
 ) where
 
 import Control.Applicative
+import Control.Monad
 import Control.Concurrent (forkIO)
 import Control.Exception
 import Data.Monoid
 import Data.Typeable (typeOf)
-import Control.Monad (forever, liftM)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -100,7 +100,7 @@ redirectToHttps _ sock = do
 -- - redirecting requests to localhost:8080
 serve :: Config -> AuthConfig -> AuthorizeAction -> SockAddr -> Socket -> IO ()
 serve config authConfig authorize addr sock = do
-  rng <- cprgCreate `liftM` createEntropyPool :: IO SystemRNG
+  rng <- cprgCreate <$> createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
                    , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS10, TLS.TLS11, TLS.TLS12]
@@ -123,8 +123,8 @@ serve config authConfig authorize addr sock = do
             case (segments, lookup "state" query, lookup "code" query) of
               (["oauth2callback"], Just (Just path), Just (Just code)) -> do
                 authenticate authConfig send request path code
-              (["oauth2callback", "logout"], _, _) ->
-                logout authConfig send request
+              (["oauth2callback", "logout"], path, _) -> do
+                logout authConfig send request (fromMaybe "/" $ join path)
               _ -> do
                 -- Check for an auth cookie.
                 case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of

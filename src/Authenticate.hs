@@ -133,10 +133,10 @@ authenticate config send request path code = do
     clientSecret = authConfigClientSecret config
     authTokenKey = authConfigAuthTokenKey config
 
-logout :: AuthConfig -> SendData -> Request a -> IO ()
-logout config send request = do
+logout :: AuthConfig -> SendData -> Request a -> ByteString -> IO ()
+logout config send request path = do
   let cookie = invalidateCookie cookieDomain cookieName
-  simpleResponse send found302 [("Location", baseUri request), ("Set-Cookie", UTF8.fromString cookie)] ""
+  simpleResponse send found302 [("Location", baseUri request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
