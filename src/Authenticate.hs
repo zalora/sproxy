@@ -92,7 +92,7 @@ baseUri :: Request a -> ByteString
 baseUri (Request _ _ headers _) = maybe (error "Host header not found") ("https://" <>) (lookup "Host" headers)
 
 redirectUri :: Request a -> ByteString
-redirectUri request = baseUri request <> "/oauth2callback"
+redirectUri request = baseUri request <> "/sproxy/oauth2callback"
 
 authUrl :: ByteString -> Request a -> AuthConfig -> ByteString
 authUrl path request c = mconcat [

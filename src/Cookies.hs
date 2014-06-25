@@ -29,7 +29,7 @@ removeCookie name cookies = case partition ((== name) . fst) cookies of
 
 setCookie :: String -> String -> String -> EpochTime -> String
 setCookie domain name value maxAge = name ++ "=" ++ value
-  ++ "; Max-Age=" ++ show maxAge ++ "; Domain=" ++ domain ++ "; HttpOnly; Secure"
+  ++ "; path=/; Max-Age=" ++ show maxAge ++ "; Domain=" ++ domain ++ "; HttpOnly; Secure"
 
 invalidateCookie :: String -> String -> String
 invalidateCookie domain name =

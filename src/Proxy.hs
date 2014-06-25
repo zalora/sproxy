@@ -121,9 +121,9 @@ serve config authConfig authorize addr sock = do
             -- Check if this is an authorization response.
             let (segments, query) = (decodePath . extractPath) p
             case (segments, lookup "state" query, lookup "code" query) of
-              (["oauth2callback"], Just (Just path), Just (Just code)) -> do
+              (["sproxy", "oauth2callback"], Just (Just path), Just (Just code)) -> do
                 authenticate authConfig send request path code
-              (["oauth2callback", "logout"], path, _) -> do
+              (["sproxy", "logout"], path, _) -> do
                 logout authConfig send request (fromMaybe "/" $ join path)
               _ -> do
                 -- Check for an auth cookie.

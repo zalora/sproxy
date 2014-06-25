@@ -29,8 +29,8 @@ back-end server (if allowed).
 
 ## Logout
 
-Hitting the endpoint `/oauth2callback/logout` will invalidate the session
-cookie and session.  The user will be redirected to `/` after logout.  The
+Hitting the endpoint `/sproxy/logout` will invalidate the session
+cookie.  The user will be redirected to `/` after logout.  The
 query parameter `state` can be provided to specify an alternate redirect path
 (the path has to be percent-encoded, e.g. with `urlEncode` from
 `Network.HTTP.Types.URI`).
@@ -78,7 +78,7 @@ Create a project in the [Google Developers Console](https://console.developers.g
  - visit *APIs & auth* -> *Credentials*
  - select *CREATE NEW CLIENT ID*
  - use `https://dev.zalora.com` as *Authorized JavaScript origins*
- - leave *Authorized redirect URI* to `https://dev.zalora.com/oauth2callback`
+ - use `https://dev.zalora.com/sproxy/oauth2callback` as *Authorized redirect URI*
 
 Put the `Client ID` in `config/sproxy.yml` and the `Client secret` in a file
 called `config/client_secret`.

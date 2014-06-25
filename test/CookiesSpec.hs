@@ -12,7 +12,7 @@ spec :: Spec
 spec = do
   describe "setCookie" $ do
     it "sets a cookie" $ do
-      setCookie "example.com" "sproxy" "foo" (30 * 24 * 60 * 60) `shouldBe` "sproxy=foo; Max-Age=2592000; Domain=example.com; HttpOnly; Secure"
+      setCookie "example.com" "sproxy" "foo" (30 * 24 * 60 * 60) `shouldBe` "sproxy=foo; path=/; Max-Age=2592000; Domain=example.com; HttpOnly; Secure"
 
   describe "invalidateCookie" $ do
     it "invalidates a cookie" $ do
