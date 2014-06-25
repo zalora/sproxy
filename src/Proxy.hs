@@ -38,6 +38,7 @@ import Authenticate
 import Cookies
 import Authorize
 import ConfigFile
+import HTTP
 
 data Config = Config {
   configTLSCredential :: TLS.Credential
@@ -142,9 +143,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
-        [] -> do
-            -- TODO: Send back a page that allows the user to request authorization.
-            simpleResponse send forbidden403 [] "Access Denied"
+        [] -> accessDenied send (authEmail token)
         _ -> do
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
