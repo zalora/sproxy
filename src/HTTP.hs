@@ -27,7 +27,7 @@ accessDenied send email = simpleResponse send forbidden403 [("Content-Type", "te
   <body>
   <h1>Access Denied</h1>
     <p>You are currently logged in as <strong>{email}</strong>.</p>
-    <p><a href="/oauth2callback/logout">logout</a></p>
+    <p><a href="/sproxy/logout">logout</a></p>
   </body>
 </html>
 |]
