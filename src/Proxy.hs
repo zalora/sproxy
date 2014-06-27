@@ -9,7 +9,7 @@ module Proxy (
 
 import Control.Applicative
 import Control.Monad
-import Control.Concurrent (forkIO)
+import Control.Concurrent
 import Control.Exception
 import System.IO.Error
 import GHC.IO.Exception
@@ -67,15 +67,20 @@ run cf authorize = do
       config = Config {
           configTLSCredential = credential
         , configBackendAddress = cfBackendAddress cf
-        , configBackendPort = fromInteger $ cfBackendPort cf
+        , configBackendPort = cfBackendPort cf
         }
+
+  mvar <- newEmptyMVar
 
   -- Immediately fork a new thread for accepting connections since
   -- the main thread is special and expensive to communicate with.
-  _ <- forkIO $ runProxy 443 config authConfig authorize `catch` logException
+  _ <- forkIO $ (runProxy (cfListen cf) config authConfig authorize `catch` logException) `finally` putMVar mvar ()
 
   -- Listen on port 80 just to redirect everything to HTTPS.
-  listen 80 redirectToHttps `catch` logException
+  when (cfRedirectHttpToHttps cf) $ do
+    listen 80 redirectToHttps `catch` logException
+
+  takeMVar mvar
   where
     -- Usually combined certs are in server, intermediate order,
     -- but the tls library expects them in the opposite order.

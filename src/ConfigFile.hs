@@ -9,6 +9,7 @@ import           System.Exit
 import           Data.Aeson
 import           Data.Yaml
 import           System.Log.Logger
+import           Network (PortNumber)
 
 withConfigFile :: FilePath -> (ConfigFile -> IO a) -> IO a
 withConfigFile configFile action = do
@@ -21,6 +22,8 @@ withConfigFile configFile action = do
 
 data ConfigFile = ConfigFile {
   cfLogLevel :: Priority
+, cfListen :: PortNumber
+, cfRedirectHttpToHttps :: Bool
 , cfCookieDomain :: String
 , cfCookieName :: String
 , cfClientID :: String
@@ -30,12 +33,14 @@ data ConfigFile = ConfigFile {
 , cfSslCerts :: FilePath
 , cfDatabase :: String
 , cfBackendAddress :: String
-, cfBackendPort :: Integer
+, cfBackendPort :: PortNumber
 } deriving (Eq, Show)
 
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
         (m .: "log_level" >>= parseLogLevel)
+    <*> (fromInteger <$> m .: "listen")
+    <*> (m .: "redirect_http_to_https")
     <*> m .: "cookie_domain"
     <*> m .: "cookie_name"
     <*> m .: "client_id"
@@ -45,7 +50,7 @@ instance FromJSON ConfigFile where
     <*> m .: "ssl_certs"
     <*> m .: "database"
     <*> m .: "backend_address"
-    <*> m .: "backend_port"
+    <*> (fromInteger <$> m .: "backend_port")
   parseJSON _ = empty
 
 parseLogLevel :: String -> Parser Priority

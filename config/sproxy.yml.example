@@ -1,5 +1,12 @@
 log_level: debug
 
+# The port sproxy listens on (this is always HTTPS).
+listen: 443
+
+# If 'yes', sproxy will open port 80 and redirect HTTP requests to the
+# specified 'listen' port.
+redirect_http_to_https: yes
+
 cookie_domain: dev.zalora.com
 cookie_name: sproxy
 
