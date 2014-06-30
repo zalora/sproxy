@@ -66,6 +66,7 @@ library
 
 executable sproxy
   main-is:             Main.hs
+  other-modules:       Authorize
   hs-source-dirs:      driver
   build-depends:       base == 4.*,
                        optparse-applicative,

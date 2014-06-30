@@ -1,14 +1,15 @@
-module Main where
-
-import           Options.Applicative
+module Main (main) where
 
 import           Network.HTTP.SProxy
+import           Options.Applicative
+
+import           Authorize
 
 main :: IO ()
 main = do
   configFile <- execParser options
   withConfigFile configFile $ \config ->
-    withDatabaseAuthorizeAction (cfDatabase config) (run config)
+    run config authorize
   where
     parser = strOption (
          long "config"
@@ -17,4 +18,4 @@ main = do
       <> value "config/sproxy.yml"
       <> help "config file path"
       )
-    options = info parser (fullDesc <> progDesc "sproxy: proxy for single sign-on")
+    options = info parser (fullDesc <> progDesc "bob-auth")
