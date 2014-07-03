@@ -173,4 +173,4 @@ listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -
   forkIO $ (action addr sock `finally` close sock) `catch` logException
 
 logException :: SomeException -> IO ()
-logException (SomeException e) = Log.debug (show (typeOf e) ++ " (" ++ show e ++ ")")
+logException (SomeException e) = Log.error (show (typeOf e) ++ " (" ++ show e ++ ")")
