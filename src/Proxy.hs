@@ -70,15 +70,14 @@ run cf authorize = do
 
   -- Immediately fork a new thread for accepting connections since
   -- the main thread is special and expensive to communicate with.
-  _ <- forkIO $ handle handleError (runProxy 443 config authConfig authorize)
+  _ <- forkIO $ runProxy 443 config authConfig authorize `catch` logException
 
   -- Listen on port 80 just to redirect everything to HTTPS.
-  handle handleError (listen 80 redirectToHttps)
- where handleError :: SomeException -> IO ()
-       handleError e = Log.debug $ show e
-       -- Usually combined certs are in server, intermediate order,
-       -- but the tls library expects them in the opposite order.
-       reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
+  listen 80 redirectToHttps `catch` logException
+  where
+    -- Usually combined certs are in server, intermediate order,
+    -- but the tls library expects them in the opposite order.
+    reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
 runProxy :: PortNumber -> Config -> AuthConfig -> AuthorizeAction -> IO ()
 runProxy port config authConfig authorize = (listen port (serve config authConfig authorize))
@@ -171,6 +170,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
 listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
 listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
   (sock, addr) <- accept serverSock
-  forkIO $ handle logError (action addr sock `finally` close sock)
- where logError :: SomeException -> IO ()
-       logError (SomeException e) = Log.debug (show (typeOf e) ++ " (" ++ show e ++ ")")
+  forkIO $ (action addr sock `finally` close sock) `catch` logException
+
+logException :: SomeException -> IO ()
+logException (SomeException e) = Log.debug (show (typeOf e) ++ " (" ++ show e ++ ")")
