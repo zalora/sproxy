@@ -50,7 +50,7 @@ data Config = Config {
 -- the server
 run :: ConfigFile -> AuthorizeAction -> IO ()
 run cf authorize = do
-  Log.setup
+  Log.setup (cfLogLevel cf)
   clientSecret <- strip <$> readFile (cfClientSecretFile cf)
   authTokenKey <- readFile (cfAuthTokenKeyFile cf)
   credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)

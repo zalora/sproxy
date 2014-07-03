@@ -1,17 +1,29 @@
 module Log (
   setup
 , debug
+, info
+, error
 ) where
 
+import           Prelude hiding (log, error)
 import           Control.Concurrent (myThreadId)
 import           Data.Time.Clock (getCurrentTime)
 import           System.Log.Logger
 
-setup :: IO ()
-setup = updateGlobalLogger "sproxy" (setLevel DEBUG)
+setup :: Priority -> IO ()
+setup p = updateGlobalLogger "sproxy" (setLevel p)
 
 debug :: String -> IO ()
-debug s = do
+debug = log DEBUG
+
+info :: String -> IO ()
+info = log INFO
+
+error :: String -> IO ()
+error = log ERROR
+
+log :: Priority -> String -> IO ()
+log p s = do
   tid <- myThreadId
   t <- getCurrentTime
-  debugM "sproxy" $ show tid ++ " " ++ show t ++ ": " ++ s
+  logM "sproxy" p $ show p ++ " " ++ show tid ++ " " ++ show t ++ ": " ++ s
