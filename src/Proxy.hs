@@ -170,7 +170,10 @@ forwardRequest config send authorize cookies addr request@(Request method path h
 listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
 listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
   (sock, addr) <- accept serverSock
-  forkIO $ (action addr sock `finally` close sock) `catch` logException
+  forkIO $ (action addr sock `finally` close sock) `catch` \e -> do
+    case fromException e of
+      Just te | te == UnexpectedEndOfInput -> Log.debug "client closed connection"
+      _ -> logException e
 
 logException :: SomeException -> IO ()
 logException (SomeException e) = Log.error (show (typeOf e) ++ " (" ++ show e ++ ")")
