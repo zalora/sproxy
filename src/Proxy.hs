@@ -11,6 +11,8 @@ import Control.Applicative
 import Control.Monad
 import Control.Concurrent (forkIO)
 import Control.Exception
+import System.IO.Error
+import GHC.IO.Exception
 import Data.Monoid
 import Data.Typeable (typeOf)
 import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
@@ -29,8 +31,8 @@ import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import System.IO
-
 import Network.HTTP.Toolkit
+
 import Type
 import Util
 import qualified Log
@@ -170,10 +172,18 @@ forwardRequest config send authorize cookies addr request@(Request method path h
 listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
 listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
   (sock, addr) <- accept serverSock
-  forkIO $ (action addr sock `finally` close sock) `catch` \e -> do
-    case fromException e of
-      Just te | te == UnexpectedEndOfInput -> Log.debug "client closed connection"
-      _ -> logException e
+  forkIO $ (action addr sock `finally` close sock) `catch` exceptionHandler
+  where
+    exceptionHandler e
+      | e `isException` UnexpectedEndOfInput || e `isException` TLS.HandshakeFailed TLS.Error_EOF || isResourceVanished e =
+          Log.debug ("client closed connection (" ++ show e ++ ")")
+      | otherwise = logException e
 
 logException :: SomeException -> IO ()
 logException (SomeException e) = Log.error (show (typeOf e) ++ " (" ++ show e ++ ")")
+
+isException :: (Eq a, Exception a) => SomeException -> a -> Bool
+isException e v = fromMaybe False $ (== v) <$> fromException e
+
+isResourceVanished :: SomeException -> Bool
+isResourceVanished = fromMaybe False . fmap ((== ResourceVanished) . ioeGetErrorType) . fromException
