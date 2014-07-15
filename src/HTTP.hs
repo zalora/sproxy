@@ -13,7 +13,7 @@ import qualified Log
 
 internalServerError :: SendData -> String -> IO ()
 internalServerError send err = do
-  Log.debug $ show err
+  Log.error $ show err
   simpleResponse send internalServerError500 [] "Internal Server Error"
 
 accessDenied :: SendData -> String -> IO ()
