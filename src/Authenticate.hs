@@ -110,18 +110,18 @@ authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString 
 authenticate config send request path code = do
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ cs code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ cs (redirectUri request), "grant_type=authorization_code"]
   case tokenRes of
-    Left err -> internalServerError send err
+    Left err -> authenticationFailed send err
     Right resp -> do
       case decode $ LazyUTF8.fromString $ Curl.respBody resp of
         Nothing -> do
-          internalServerError send "Received an invalid response from Google's authentication server."
+          authenticationFailed send "Received an invalid response from Google's authentication server."
         Just token -> do
           infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
           case infoRes of
-            Left err -> internalServerError send err
+            Left err -> authenticationFailed send err
             Right i -> do
               case decode $ LazyUTF8.fromString $ Curl.respBody i of
-                Nothing -> internalServerError send "Received an invalid user info response from Google's authentication server."
+                Nothing -> authenticationFailed send "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
