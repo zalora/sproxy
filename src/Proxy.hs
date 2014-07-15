@@ -74,11 +74,11 @@ run cf authorize = do
 
   -- Immediately fork a new thread for accepting connections since
   -- the main thread is special and expensive to communicate with.
-  _ <- forkIO $ (runProxy (cfListen cf) config authConfig authorize `catch` logException) `finally` putMVar mvar ()
+  void . forkIO $ (runProxy (cfListen cf) config authConfig authorize `catch` logException) `finally` putMVar mvar ()
 
   -- Listen on port 80 just to redirect everything to HTTPS.
   when (cfRedirectHttpToHttps cf) $ do
-    listen 80 redirectToHttps `catch` logException
+    void . forkIO $ listen 80 redirectToHttps `catch` logException
 
   takeMVar mvar
   where
