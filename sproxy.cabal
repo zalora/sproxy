@@ -36,7 +36,7 @@ library
                        concurrent-extra,
                        containers >= 0.5,
                        crypto-random,
-                       curl,
+                       http-conduit,
                        data-default,
                        hslogger,
                        http-types >= 0.8.5,
@@ -87,7 +87,7 @@ test-suite spec
                        concurrent-extra,
                        containers >= 0.5,
                        crypto-random,
-                       curl,
+                       http-conduit,
                        data-default,
                        hslogger,
                        http-types,
@@ -110,7 +110,6 @@ test-suite spec
                        yaml >= 0.8,
 
                        hspec >= 1.5,
-                       http-conduit,
                        wai >= 3.0.0.2,
                        warp >= 3.0.0.3,
                        connection
