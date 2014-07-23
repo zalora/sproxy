@@ -15,22 +15,22 @@ module Authenticate (
 ) where
 
 import           Control.Applicative
+import           Control.Exception
 import           Text.Read (readMaybe)
 import           Data.Monoid
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.UTF8 as UTF8
-import qualified Data.ByteString.Lazy.UTF8 as LazyUTF8
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import           Data.String.Conversions (cs)
 import           Data.List.Split (splitOn)
 import           Data.Aeson
 import           Network.HTTP.Types
-import qualified Network.Curl as Curl
 import           System.Posix.Types (EpochTime)
 import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
-
+import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, withManager, RequestBody(..))
+import qualified Network.HTTP.Conduit as HTTP
 import           Network.HTTP.Toolkit
 
 import           Type
@@ -110,19 +110,20 @@ redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found3
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
   Log.info ("authencitacion request with code " ++ show code)
-  tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ cs code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ cs (redirectUri request), "grant_type=authorization_code"]
+  r <- parseUrl $ "https://accounts.google.com/o/oauth2/token"
+  tokenRes <- try . withManager $ httpLbs r {HTTP.method = "POST", HTTP.requestBody = RequestBodyBS . cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri request) ++ "&grant_type=authorization_code", HTTP.requestHeaders = [("Content-Type", "application/x-www-form-urlencoded")]}
   case tokenRes of
-    Left err -> authenticationFailed send ("error while authenticating: " ++ err)
+    Left err -> authenticationFailed send ("error while authenticating: " ++ show (err :: HTTP.HttpException))
     Right resp -> do
-      case decode $ LazyUTF8.fromString $ Curl.respBody resp of
+      case decode (HTTP.responseBody resp) of
         Nothing -> do
           authenticationFailed send "Received an invalid response from Google's authentication server."
         Just token -> do
-          infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
+          infoRes <- try $ simpleHttp ("https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token)
           case infoRes of
-            Left err -> authenticationFailed send ("error while retrieving user info: " ++ err)
-            Right i -> do
-              case decode $ LazyUTF8.fromString $ Curl.respBody i of
+            Left err -> authenticationFailed send ("error while retrieving user info: " ++ show (err :: HTTP.HttpException))
+            Right body -> do
+              case decode body of
                 Nothing -> authenticationFailed send "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
@@ -142,20 +143,6 @@ logout config send request path = do
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
-
-curl :: Curl.URLString -> [Curl.CurlOption] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
-curl url options = Curl.withCurlDo $ do
-  c <- Curl.initialize
-  r <- Curl.do_curl_ c url options
-  if Curl.respCurlCode r /= Curl.CurlOK
-    then return $ Left $ show (Curl.respCurlCode r) ++ " -- " ++ Curl.respStatusLine r
-    else return $ Right r
-
-post :: Curl.URLString -> [String] -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
-post url fields = curl url $ Curl.CurlPostFields fields : Curl.method_POST
-
-get :: Curl.URLString -> IO (Either String (Curl.CurlResponse_ [(String, String)] String))
-get url = curl url Curl.method_GET
 
 validAuth :: AuthConfig -> String -> IO (Maybe AuthToken)
 validAuth config token =
