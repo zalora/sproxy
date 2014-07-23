@@ -36,6 +36,7 @@ import           Network.HTTP.Toolkit
 import           Type
 import           Cookies
 import           HTTP
+import qualified Log
 
 data AuthConfig = AuthConfig {
   authConfigCookieDomain :: String
@@ -108,9 +109,10 @@ redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found3
 
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
+  Log.info ("authencitacion request with code " ++ show code)
   tokenRes <- post "https://accounts.google.com/o/oauth2/token" ["code=" ++ cs code, "client_id=" ++ clientID, "client_secret=" ++ clientSecret, "redirect_uri=" ++ cs (redirectUri request), "grant_type=authorization_code"]
   case tokenRes of
-    Left err -> authenticationFailed send err
+    Left err -> authenticationFailed send ("error while authenticating: " ++ err)
     Right resp -> do
       case decode $ LazyUTF8.fromString $ Curl.respBody resp of
         Nothing -> do
@@ -118,7 +120,7 @@ authenticate config send request path code = do
         Just token -> do
           infoRes <- get $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token
           case infoRes of
-            Left err -> authenticationFailed send err
+            Left err -> authenticationFailed send ("error while retrieving user info: " ++ err)
             Right i -> do
               case decode $ LazyUTF8.fromString $ Curl.respBody i of
                 Nothing -> authenticationFailed send "Received an invalid user info response from Google's authentication server."
