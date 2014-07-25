@@ -110,8 +110,7 @@ redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found3
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
   Log.info ("authencitacion request with code " ++ show code)
-  r <- parseUrl $ "https://accounts.google.com/o/oauth2/token"
-  tokenRes <- try . withManager $ httpLbs r {HTTP.method = "POST", HTTP.requestBody = RequestBodyBS . cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri request) ++ "&grant_type=authorization_code", HTTP.requestHeaders = [("Content-Type", "application/x-www-form-urlencoded")]}
+  tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token" (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri request) ++ "&grant_type=authorization_code")
   case tokenRes of
     Left err -> authenticationFailed send ("error while authenticating: " ++ show (err :: HTTP.HttpException))
     Right resp -> do
@@ -143,6 +142,11 @@ logout config send request path = do
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
+
+post :: String -> ByteString -> IO (HTTP.Response BL8.ByteString)
+post url body = do
+  r <- parseUrl url
+  withManager $ httpLbs r {HTTP.method = "POST", HTTP.requestBody = RequestBodyBS body, HTTP.requestHeaders = [("Content-Type", "application/x-www-form-urlencoded")]}
 
 validAuth :: AuthConfig -> String -> IO (Maybe AuthToken)
 validAuth config token =
