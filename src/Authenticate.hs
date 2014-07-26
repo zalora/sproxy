@@ -109,7 +109,7 @@ redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found3
 
 authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
 authenticate config send request path code = do
-  Log.info ("authencitacion request with code " ++ show code)
+  Log.info ("authentication request with code " ++ show code)
   tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token" (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri request) ++ "&grant_type=authorization_code")
   case tokenRes of
     Left err -> authenticationFailed send ("error while authenticating: " ++ show (err :: HTTP.HttpException))
