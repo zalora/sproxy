@@ -119,27 +119,29 @@ serve config authConfig authorize addr sock = do
     serve_ :: SendData -> InputStream -> IO ()
     serve_ send conn = go
       where
+        -- TODO: Don't loop for more input on Connection: close header.
+        -- Check if this is an authorization response.
         go :: IO ()
-        go = forever $ readRequest True conn >>= \request -> case request of
-          Request _ p headers _ -> do
-            -- TODO: Don't loop for more input on Connection: close header.
-            -- Check if this is an authorization response.
-            let (segments, query) = (decodePath . extractPath) p
-            case (segments, lookup "state" query, lookup "code" query) of
-              (["sproxy", "oauth2callback"], Just (Just path), Just (Just code)) -> do
-                authenticate authConfig send request path code
-              (["sproxy", "logout"], path, _) -> do
-                logout authConfig send request (fromMaybe "/" $ join path)
-              _ -> do
-                -- Check for an auth cookie.
-                case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                  Nothing -> redirectForAuth authConfig request send
-                  Just (authCookie, cookies) -> do
-                    auth <- validAuth authConfig authCookie
-                    case auth of
+        go = forever $ do
+          request <- readRequest True conn
+          case request of
+              Request _ p headers _ -> do
+                let (segments, query) = (decodePath . extractPath) p
+                case (segments, lookup "state" query, lookup "code" query) of
+                  (["sproxy", "oauth2callback"], Just (Just path), Just (Just code)) -> do
+                    authenticate authConfig send request path code
+                  (["sproxy", "logout"], path, _) -> do
+                    logout authConfig send request (fromMaybe "/" $ join path)
+                  _ -> do
+                    -- Check for an auth cookie.
+                    case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
                       Nothing -> redirectForAuth authConfig request send
-                      Just token -> do
-                        forwardRequest config send authorize cookies addr request token
+                      Just (authCookie, cookies) -> do
+                        auth <- validAuth authConfig authCookie
+                        case auth of
+                          Nothing -> redirectForAuth authConfig request send
+                          Just token -> do
+                            forwardRequest config send authorize cookies addr request token
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
