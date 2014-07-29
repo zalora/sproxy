@@ -31,9 +31,8 @@ import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
 import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, withManager, RequestBody(..))
 import qualified Network.HTTP.Conduit as HTTP
-import           Network.HTTP.Toolkit
+import           Network.HTTP.Toolkit (simpleResponse)
 
-import           Util
 import           Type
 import           Cookies
 import           HTTP
@@ -90,25 +89,25 @@ instance FromJSON UserInfo where
     <*> v .: "family_name"
   parseJSON _ = empty
 
-redirectUri :: Request a -> ByteString
-redirectUri request = baseUri_ request <> "/sproxy/oauth2callback"
+redirectUri :: ByteString -> ByteString
+redirectUri baseUri = baseUri <> "/sproxy/oauth2callback"
 
-authUrl :: ByteString -> Request a -> AuthConfig -> ByteString
-authUrl path request c = mconcat [
+authUrl :: ByteString -> ByteString -> AuthConfig -> ByteString
+authUrl path baseUri c = mconcat [
     "https://accounts.google.com/o/oauth2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&"
   , "state=", urlEncode True path
-  , "&redirect_uri=", redirectUri request
+  , "&redirect_uri=", redirectUri baseUri
   , "&response_type=code&client_id=", B8.pack (authConfigClientID c)
   , "&approval_prompt=force&access_type=offline"
   ]
 
-redirectForAuth :: AuthConfig -> Request a -> SendData -> IO ()
-redirectForAuth c request@(Request _ path _ _) send = simpleResponse send found302 [("Location", authUrl path request c)] ""
+redirectForAuth :: AuthConfig -> ByteString -> ByteString -> SendData -> IO ()
+redirectForAuth c path baseUri send = simpleResponse send found302 [("Location", authUrl path baseUri c)] ""
 
-authenticate :: AuthConfig -> SendData -> Request a -> ByteString -> ByteString -> IO ()
-authenticate config send request path code = do
+authenticate :: AuthConfig -> SendData -> ByteString -> ByteString -> ByteString -> IO ()
+authenticate config send baseUri path code = do
   Log.info ("authentication request with code " ++ show code)
-  tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token" (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri request) ++ "&grant_type=authorization_code")
+  tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token" (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri baseUri) ++ "&grant_type=authorization_code")
   case tokenRes of
     Left err -> authenticationFailed send ("error while authenticating: " ++ show (err :: HTTP.HttpException))
     Right resp -> do
@@ -125,7 +124,7 @@ authenticate config send request path code = do
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
-                  simpleResponse send found302 [("Location", baseUri_ request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
+                  simpleResponse send found302 [("Location", baseUri <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
@@ -133,10 +132,10 @@ authenticate config send request path code = do
     clientSecret = authConfigClientSecret config
     authTokenKey = authConfigAuthTokenKey config
 
-logout :: AuthConfig -> SendData -> Request a -> ByteString -> IO ()
-logout config send request path = do
+logout :: AuthConfig -> SendData -> ByteString -> IO ()
+logout config send url = do
   let cookie = invalidateCookie cookieDomain cookieName
-  simpleResponse send found302 [("Location", baseUri_ request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
+  simpleResponse send found302 [("Location", url), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config

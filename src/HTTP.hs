@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 module HTTP (
-  authenticationFailed
+  hostHeaderMissing
+, authenticationFailed
 , accessDenied
 ) where
 
@@ -10,6 +11,11 @@ import           Text.InterpolatedString.Perl6 (qc)
 
 import           Type
 import qualified Log
+
+hostHeaderMissing :: SendData -> Request a -> IO ()
+hostHeaderMissing send r = do
+  Log.warning $ "Host header missing for request: " ++ show (requestMethod r, requestPath r, requestHeaders r)
+  simpleResponse send badRequest400 [] "400 Bad Request"
 
 authenticationFailed :: SendData -> String -> IO ()
 authenticationFailed send err = do

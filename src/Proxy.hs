@@ -94,9 +94,16 @@ redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
   conn <- makeInputStream (Socket.recv sock 4096)
   request <- readRequest True conn
-  let location = baseUri_ request <> (requestPath request)
-  Log.debug ("Redirecting HTTP request to " ++ show location)
-  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", location)] ""
+
+  case baseUri (requestHeaders request) of
+    Just uri -> do
+      let location = uri <> requestPath request
+      Log.debug ("Redirecting HTTP request to " ++ show location)
+      simpleResponse send seeOther303 [("Location", location)] ""
+    Nothing -> do
+      hostHeaderMissing send request
+  where
+    send = Socket.sendAll sock
 
 -- | Actual server:
 -- - ssl handshake
@@ -123,26 +130,28 @@ serve config authConfig authorize addr sock = do
         -- Check if this is an authorization response.
         go :: IO ()
         go = forever $ do
-          request <- readRequest True conn
-          case request of
-              Request _ p headers _ -> do
-                let (segments, query) = (decodePath . extractPath) p
-                let path = fromMaybe "/" $ join $ lookup "state" query
+          request@(Request _ path headers _) <- readRequest True conn
+          case baseUri (requestHeaders request) of
+            Nothing -> do
+              hostHeaderMissing send request
+            Just uri -> do
+                let (segments, query) = (decodePath . extractPath) path
+                let redirectPath = fromMaybe "/" $ join $ lookup "state" query
                 case segments of
                   ["sproxy", "oauth2callback"] -> do
                     case join $ lookup "code" query of
                       Nothing -> simpleResponse send badRequest400 [] "400 Bad Request"
-                      Just code -> authenticate authConfig send request path code
+                      Just code -> authenticate authConfig send uri redirectPath code
                   ["sproxy", "logout"] -> do
-                    logout authConfig send request path
+                    logout authConfig send (uri <> redirectPath)
                   _ -> do
                     -- Check for an auth cookie.
                     case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                      Nothing -> redirectForAuth authConfig request send
+                      Nothing -> redirectForAuth authConfig path uri send
                       Just (authCookie, cookies) -> do
                         auth <- validAuth authConfig authCookie
                         case auth of
-                          Nothing -> redirectForAuth authConfig request send
+                          Nothing -> redirectForAuth authConfig path uri send
                           Just token -> do
                             forwardRequest config send authorize cookies addr request token
 

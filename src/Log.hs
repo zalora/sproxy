@@ -2,6 +2,7 @@ module Log (
   setup
 , debug
 , info
+, warning
 , error
 ) where
 
@@ -18,6 +19,9 @@ debug = log DEBUG
 
 info :: String -> IO ()
 info = log INFO
+
+warning :: String -> IO ()
+warning = log WARNING
 
 error :: String -> IO ()
 error = log ERROR
