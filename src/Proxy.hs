@@ -135,25 +135,25 @@ serve config authConfig authorize addr sock = do
             Nothing -> do
               hostHeaderMissing send request
             Just uri -> do
-                let (segments, query) = (decodePath . extractPath) path
-                let redirectPath = fromMaybe "/" $ join $ lookup "state" query
-                case segments of
-                  ["sproxy", "oauth2callback"] -> do
-                    case join $ lookup "code" query of
-                      Nothing -> simpleResponse send badRequest400 [] "400 Bad Request"
-                      Just code -> authenticate authConfig send uri redirectPath code
-                  ["sproxy", "logout"] -> do
-                    logout authConfig send (uri <> redirectPath)
-                  _ -> do
-                    -- Check for an auth cookie.
-                    case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                      Nothing -> redirectForAuth authConfig path uri send
-                      Just (authCookie, cookies) -> do
-                        auth <- validAuth authConfig authCookie
-                        case auth of
-                          Nothing -> redirectForAuth authConfig path uri send
-                          Just token -> do
-                            forwardRequest config send authorize cookies addr request token
+              let (segments, query) = (decodePath . extractPath) path
+              let redirectPath = fromMaybe "/" $ join $ lookup "state" query
+              case segments of
+                ["sproxy", "oauth2callback"] -> do
+                  case join $ lookup "code" query of
+                    Nothing -> simpleResponse send badRequest400 [] "400 Bad Request"
+                    Just code -> authenticate authConfig send uri redirectPath code
+                ["sproxy", "logout"] -> do
+                  logout authConfig send (uri <> redirectPath)
+                _ -> do
+                  -- Check for an auth cookie.
+                  case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
+                    Nothing -> redirectForAuth authConfig path uri send
+                    Just (authCookie, cookies) -> do
+                      auth <- validAuth authConfig authCookie
+                      case auth of
+                        Nothing -> redirectForAuth authConfig path uri send
+                        Just token -> do
+                          forwardRequest config send authorize cookies addr request token
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
