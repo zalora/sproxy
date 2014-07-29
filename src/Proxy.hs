@@ -127,11 +127,14 @@ serve config authConfig authorize addr sock = do
           case request of
               Request _ p headers _ -> do
                 let (segments, query) = (decodePath . extractPath) p
-                case (segments, lookup "state" query, lookup "code" query) of
-                  (["sproxy", "oauth2callback"], Just (Just path), Just (Just code)) -> do
-                    authenticate authConfig send request path code
-                  (["sproxy", "logout"], path, _) -> do
-                    logout authConfig send request (fromMaybe "/" $ join path)
+                let path = fromMaybe "/" $ join $ lookup "state" query
+                case segments of
+                  ["sproxy", "oauth2callback"] -> do
+                    case join $ lookup "code" query of
+                      Nothing -> simpleResponse send badRequest400 [] "400 Bad Request"
+                      Just code -> authenticate authConfig send request path code
+                  ["sproxy", "logout"] -> do
+                    logout authConfig send request path
                   _ -> do
                     -- Check for an auth cookie.
                     case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
