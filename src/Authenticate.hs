@@ -33,6 +33,7 @@ import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, withManage
 import qualified Network.HTTP.Conduit as HTTP
 import           Network.HTTP.Toolkit
 
+import           Util
 import           Type
 import           Cookies
 import           HTTP
@@ -89,11 +90,8 @@ instance FromJSON UserInfo where
     <*> v .: "family_name"
   parseJSON _ = empty
 
-baseUri :: Request a -> ByteString
-baseUri (Request _ _ headers _) = maybe (error "Host header not found") ("https://" <>) (lookup "Host" headers)
-
 redirectUri :: Request a -> ByteString
-redirectUri request = baseUri request <> "/sproxy/oauth2callback"
+redirectUri request = baseUri_ request <> "/sproxy/oauth2callback"
 
 authUrl :: ByteString -> Request a -> AuthConfig -> ByteString
 authUrl path request c = mconcat [
@@ -127,7 +125,7 @@ authenticate config send request path code = do
                 Just userInfo -> do
                   clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
                   let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
-                  simpleResponse send found302 [("Location", baseUri request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
+                  simpleResponse send found302 [("Location", baseUri_ request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
@@ -138,7 +136,7 @@ authenticate config send request path code = do
 logout :: AuthConfig -> SendData -> Request a -> ByteString -> IO ()
 logout config send request path = do
   let cookie = invalidateCookie cookieDomain cookieName
-  simpleResponse send found302 [("Location", baseUri request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
+  simpleResponse send found302 [("Location", baseUri_ request <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config

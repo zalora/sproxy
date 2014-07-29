@@ -94,11 +94,9 @@ redirectToHttps :: SockAddr -> Socket -> IO ()
 redirectToHttps _ sock = do
   conn <- makeInputStream (Socket.recv sock 4096)
   request <- readRequest True conn
-  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", requestURI request)] ""
-  where
-    requestURI (Request _ path headers _) =
-      let host = fromMaybe (error "Host header not found") $ lookup "Host" headers
-      in "https://" <> host <> path
+  let location = baseUri_ request <> (requestPath request)
+  Log.debug ("Redirecting HTTP request to " ++ show location)
+  simpleResponse (Socket.sendAll sock) seeOther303 [("Location", location)] ""
 
 -- | Actual server:
 -- - ssl handshake

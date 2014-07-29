@@ -5,10 +5,12 @@ import           Control.Applicative
 import           Data.Char
 import           Data.String
 import           Data.Monoid
+import           Data.Maybe
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.ByteString (ByteString)
 import           Network.HTTP.Types
+import           Network.HTTP.Toolkit
 import           Network.Socket
 
 formatSockAddr :: SockAddr -> IO HostName
@@ -26,3 +28,9 @@ removeConnectionHeader = filter ((/= hConnection) . fst)
 
 strip :: String -> String
 strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+
+baseUri :: Request a -> Maybe ByteString
+baseUri (Request _ _ headers _) = ("https://" <>) <$> lookup "Host" headers
+
+baseUri_ :: Request a -> ByteString
+baseUri_ = fromMaybe (error "Host header not found") . baseUri
