@@ -29,7 +29,7 @@ library
                        ConfigFile
   build-depends:       aeson >= 0.7.0.4,
                        attoparsec,
-                       base >=4.6 && <4.7,
+                       base == 4.*,
                        bytestring,
                        case-insensitive,
                        certificate,
@@ -80,7 +80,7 @@ test-suite spec
   main-is:             Spec.hs
   build-depends:       aeson,
                        attoparsec,
-                       base >=4.6 && <4.7,
+                       base == 4.*,
                        bytestring,
                        case-insensitive,
                        certificate,
