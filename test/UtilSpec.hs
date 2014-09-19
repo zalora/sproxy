@@ -36,3 +36,16 @@ spec = do
   describe "removeConnectionHeader" $ do
     it "removes Connection header" $ do
       removeConnectionHeader [("Connection", "close"), ("Content-Type", "text/html")] `shouldBe` [("Content-Type", "text/html")]
+
+  describe "isConnectionClose" $ do
+    it "is True if 'Connection: close' is given" $ do
+      isConnectionClose [("Connection", "close")] `shouldBe` True
+
+    it "ignores whitespace" $ do
+      isConnectionClose [("Connection", " close  ")] `shouldBe` True
+
+    it "ignores case" $ do
+      isConnectionClose [("Connection", "Close")] `shouldBe` True
+
+    it "is False if 'Connection: close' is not given" $ do
+      isConnectionClose [("Connection", "foo")] `shouldBe` False

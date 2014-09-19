@@ -126,10 +126,13 @@ serve config authConfig authorize addr sock = do
     serve_ :: SendData -> InputStream -> IO ()
     serve_ send conn = go
       where
-        -- TODO: Don't loop for more input on Connection: close header.
-        -- Check if this is an authorization response.
         go :: IO ()
-        go = forever $ do
+        go = do
+          continue <- handleOne
+          when continue go
+
+        handleOne :: IO Bool
+        handleOne = do
           request@(Request _ path headers _) <- readRequest True conn
           case baseUri (requestHeaders request) of
             Nothing -> do
@@ -154,6 +157,7 @@ serve config authConfig authorize addr sock = do
                         Nothing -> redirectForAuth authConfig path uri send
                         Just token -> do
                           forwardRequest config send authorize cookies addr request token
+          return (not $ isConnectionClose headers)
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()

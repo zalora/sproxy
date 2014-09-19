@@ -6,7 +6,9 @@ import           Test.Hspec
 import           Control.Applicative
 import           Control.Exception
 import           Control.Concurrent
+import           System.Timeout
 import           Data.IORef
+import           Data.Monoid
 import           Data.String
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
@@ -56,21 +58,36 @@ performRequest f = do
   manager <- newManager (mkManagerSettings tlsSettings Nothing)
   request <- f <$> parseUrl "https://localhost:4060"
   httpLbs request{redirectCount = 0, checkStatus = \_ _ _ -> Nothing} manager
-  where
-    tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
+
+tlsSettings :: TLSSettings
+tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
 
 performRequestWithCookie :: (Request -> Request) -> IO (Response L.ByteString)
 performRequestWithCookie f = do
-  cookie <- show <$> authToken authTokenKey "me@example.com" ("John", "Doe")
+  cookie <- mkAuthCookie
   performRequest (setSproxyCookie cookie . f)
   where
-    setSproxyCookie cookie r = r {requestHeaders = ("Cookie", fromString $ "sproxy=" ++ cookie) : requestHeaders r}
+    setSproxyCookie cookie r = r {requestHeaders = ("Cookie", cookie) : requestHeaders r}
+
+mkAuthCookie :: IO ByteString
+mkAuthCookie = do
+  cookie <- show <$> authToken authTokenKey "me@example.com" ("John", "Doe")
+  return ("sproxy=" <> fromString cookie)
 
 get :: IO L.ByteString
 get = responseBody <$> performRequestWithCookie id
 
 post :: RequestBody -> IO L.ByteString
 post body = responseBody <$> performRequestWithCookie (\r -> r {method = "POST", requestBody = body})
+
+connectionGetAll :: Connection -> IO ByteString
+connectionGetAll conn = go
+  where
+    go = do
+      bs <- connectionGet conn 4096
+      if B.null bs
+        then return bs
+        else (bs <>) <$> go
 
 spec :: Spec
 spec = around withProxy $ do
@@ -102,6 +119,15 @@ spec = around withProxy $ do
         request <- readMVar mvar
         (lookup "Content-Length" $ fst request) `shouldBe` Just "3"
         snd request `shouldBe` ["foo"]
+
+    it "handles 'Connection: close'" $ do
+      withBackendMock [] "hello" $ \_ -> do
+        ctx <- initConnectionContext
+        conn <- connectTo ctx (ConnectionParams "localhost" 4060 (Just tlsSettings) Nothing)
+        cookie <- mkAuthCookie
+        connectionPut conn ("GET / HTTP/1.1\r\nCookie: " <> cookie <> "\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        Just xs <- timeout 100000 (connectionGetAll conn)
+        xs `shouldSatisfy` B.isSuffixOf "hello\r\n0\r\n\r\n"
 
     context "when user does not send cookie" $ do
       it "redirects user to Google OAuth page" $ do

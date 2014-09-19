@@ -8,6 +8,7 @@ import           Data.Monoid
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B
 import           Network.HTTP.Types
 import           Network.Socket
 
@@ -29,3 +30,9 @@ strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
 baseUri :: [Header] -> Maybe ByteString
 baseUri headers = ("https://" <>) <$> lookup "Host" headers
+
+isConnectionClose :: [Header] -> Bool
+isConnectionClose = any p
+  where
+    p (k, v) = k == hConnection && (B.map toLower $ stripBS v) == "close"
+    stripBS = B.reverse . B.dropWhile isSpace . B.reverse . B.dropWhile isSpace
