@@ -157,7 +157,7 @@ serve config authConfig authorize addr sock = do
                         Nothing -> redirectForAuth authConfig path uri send
                         Just token -> do
                           forwardRequest config send authorize cookies addr request token
-          return (not $ isConnectionClose headers)
+          return ((not . isConnectionClose) headers)
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
 forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
