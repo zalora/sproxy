@@ -6,6 +6,7 @@ import           Test.Hspec
 import           Control.Applicative
 import           Control.Exception
 import           Control.Concurrent
+import           System.IO
 import           System.Timeout
 import           Data.IORef
 import           Data.Monoid
@@ -20,6 +21,7 @@ import qualified Network.Wai.Handler.Warp as Warp
 import           Network.HTTP.Conduit
 import qualified Network.TLS as TLS
 import           Network.Connection
+import           System.Process
 
 import           Proxy
 import           Authenticate
@@ -90,6 +92,12 @@ connectionGetAll conn = go
         then return bs
         else (bs <>) <$> go
 
+spawnProcessSilent :: FilePath -> [String] -> IO ProcessHandle
+spawnProcessSilent cmd args = do
+  h <- openFile "/dev/null" WriteMode
+  (_,_,_,p) <- createProcess (proc cmd args) {std_err = UseHandle h}
+  return p
+
 spec :: Spec
 spec = around withProxy $ do
   describe "runProxy" $ do
@@ -129,6 +137,10 @@ spec = around withProxy $ do
         connectionPut conn ("GET / HTTP/1.1\r\nCookie: " <> cookie <> "\r\nHost: localhost\r\nConnection: close\r\n\r\n")
         Just xs <- timeout 500000 (connectionGetAll conn)
         xs `shouldSatisfy` B.isSuffixOf "hello\r\n0\r\n\r\n"
+
+    it "handles HTTP/1.0 back-end applications" $ do
+      bracket (spawnProcessSilent "python" ["example/app.py", "4061"]) terminateProcess $ \_ -> do
+        timeout 500000 get `shouldReturn` Just "foo"
 
     context "when user does not send cookie" $ do
       it "redirects user to Google OAuth page" $ do

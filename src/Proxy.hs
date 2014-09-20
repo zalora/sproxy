@@ -137,39 +137,41 @@ serve config authConfig authorize addr sock = do
           request@(Request _ path headers _) <- readRequest True conn
           mResponse <- case baseUri (requestHeaders request) of
             Nothing -> do
-              Just <$> hostHeaderMissing request
+              Right <$> hostHeaderMissing request
             Just uri -> do
               let (segments, query) = (decodePath . extractPath) path
               let redirectPath = fromMaybe "/" $ join $ lookup "state" query
               case segments of
                 ["sproxy", "oauth2callback"] -> do
                   case join $ lookup "code" query of
-                    Nothing -> Just <$> badRequest
-                    Just code -> Just <$> authenticate authConfig uri redirectPath code
+                    Nothing -> Right <$> badRequest
+                    Just code -> Right <$> authenticate authConfig uri redirectPath code
                 ["sproxy", "logout"] -> do
-                  Just <$> logout authConfig (uri <> redirectPath)
+                  Right <$> logout authConfig (uri <> redirectPath)
                 _ -> do
                   -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                    Nothing -> Just <$> redirectForAuth authConfig path uri
+                    Nothing -> Right <$> redirectForAuth authConfig path uri
                     Just (authCookie, cookies) -> do
                       auth <- validAuth authConfig authCookie
                       case auth of
-                        Nothing -> Just <$> redirectForAuth authConfig path uri
+                        Nothing -> Right <$> redirectForAuth authConfig path uri
                         Just token -> do
                           forwardRequest config send authorize cookies addr request token
           forM_ mResponse (sendResponse send)
-          return ((not . isConnectionClose) headers)
+          return ((not . isConnectionClose) headers && responseVersion_ mResponse  >= http11)
+
+        responseVersion_ :: Either HttpVersion (Response a) -> HttpVersion
+        responseVersion_ = either id responseVersion
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO (Maybe (Response BodyReader))
+forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO (Either HttpVersion (Response BodyReader))
 forwardRequest config send authorize cookies addr request@(Request method path headers _) token = do
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
-        [] -> Just <$> accessDenied (authEmail token)
+        [] -> Right <$> accessDenied (authEmail token)
         _ -> do
-            -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
                     toList $
                     insert "From" (cs $ authEmail token) $
@@ -183,15 +185,17 @@ forwardRequest config send authorize cookies addr request@(Request method path h
             bracket (connectTo host port) hClose $ \h -> do
               sendRequest (B.hPutStr h) request{requestHeaders = downStreamHeaders}
               conn <- inputStreamFromHandle h
-              response <- readResponse True method conn
-              sendResponse send response{responseHeaders = removeConnectionHeader (responseHeaders response)}
-              return Nothing
+              response <- removeConnectionHeader_ <$> readResponse True method conn
+              sendResponse send response
+              return (Left $ responseVersion response)
   where
     host = configBackendAddress config
     port = PortNumber (configBackendPort config)
     setCookies = case cookies of
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
+
+    removeConnectionHeader_ response = response{responseHeaders = removeConnectionHeader (responseHeaders response)}
 
 listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
 listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
