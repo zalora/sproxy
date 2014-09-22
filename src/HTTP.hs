@@ -3,24 +3,29 @@ module HTTP (
   hostHeaderMissing
 , authenticationFailed
 , accessDenied
+, badRequest
+, mkResponse
 ) where
 
+import           Control.Applicative
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B
 import           Network.HTTP.Types
 import           Network.HTTP.Toolkit
+import           Network.HTTP.Toolkit.Body
 import           Text.InterpolatedString.Perl6 (qc)
 
-import           Type
 import qualified Log
 
-hostHeaderMissing :: SendData -> Request a -> IO ()
-hostHeaderMissing send r = do
+hostHeaderMissing :: Request a -> IO (Response BodyReader)
+hostHeaderMissing r = do
   Log.warning $ "Host header missing for request: " ++ show (requestMethod r, requestPath r, requestHeaders r)
-  simpleResponse send badRequest400 [] "400 Bad Request"
+  mkTextResponse badRequest400 "400 Bad Request"
 
-authenticationFailed :: SendData -> String -> IO ()
-authenticationFailed send err = do
+authenticationFailed :: String -> IO (Response BodyReader)
+authenticationFailed err = do
   Log.error err
-  simpleResponse send internalServerError500 [("Content-Type", "text/html")] [qc|
+  mkHtmlResponse internalServerError500 [qc|
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -35,8 +40,8 @@ authenticationFailed send err = do
 </html>
 |]
 
-accessDenied :: SendData -> String -> IO ()
-accessDenied send email = simpleResponse send forbidden403 [("Content-Type", "text/html")] [qc|
+accessDenied :: String -> IO (Response BodyReader)
+accessDenied email = mkHtmlResponse forbidden403 [qc|
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -50,3 +55,17 @@ accessDenied send email = simpleResponse send forbidden403 [("Content-Type", "te
   </body>
 </html>
 |]
+
+badRequest :: IO (Response BodyReader)
+badRequest = mkTextResponse badRequest400 "400 Bad Request"
+
+mkResponse :: Status -> [Header] -> ByteString -> IO (Response BodyReader)
+mkResponse status headers_ body = Response status headers <$> fromByteString body
+  where
+    headers = ("Content-Length", B.pack . show . B.length $ body) : headers_
+
+mkTextResponse :: Status -> ByteString -> IO (Response BodyReader)
+mkTextResponse status = mkResponse status [("Content-Type", "text/plain")]
+
+mkHtmlResponse :: Status -> ByteString -> IO (Response BodyReader)
+mkHtmlResponse status = mkResponse status [("Content-Type", "text/html")]

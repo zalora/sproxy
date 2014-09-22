@@ -8,7 +8,8 @@ module Proxy (
 ) where
 
 import Control.Applicative
-import Control.Monad
+import Control.Monad hiding (forM_)
+import Data.Foldable (forM_)
 import Control.Concurrent
 import Control.Exception
 import System.IO.Error
@@ -101,7 +102,7 @@ redirectToHttps _ sock = do
       Log.debug ("Redirecting HTTP request to " ++ show location)
       simpleResponse send seeOther303 [("Location", location)] ""
     Nothing -> do
-      hostHeaderMissing send request
+      hostHeaderMissing request >>= sendResponse send
   where
     send = Socket.sendAll sock
 
@@ -134,38 +135,39 @@ serve config authConfig authorize addr sock = do
         handleOne :: IO Bool
         handleOne = do
           request@(Request _ path headers _) <- readRequest True conn
-          case baseUri (requestHeaders request) of
+          mResponse <- case baseUri (requestHeaders request) of
             Nothing -> do
-              hostHeaderMissing send request
+              Just <$> hostHeaderMissing request
             Just uri -> do
               let (segments, query) = (decodePath . extractPath) path
               let redirectPath = fromMaybe "/" $ join $ lookup "state" query
               case segments of
                 ["sproxy", "oauth2callback"] -> do
                   case join $ lookup "code" query of
-                    Nothing -> simpleResponse send badRequest400 [] "400 Bad Request"
-                    Just code -> authenticate authConfig send uri redirectPath code
+                    Nothing -> Just <$> badRequest
+                    Just code -> Just <$> authenticate authConfig uri redirectPath code
                 ["sproxy", "logout"] -> do
-                  logout authConfig send (uri <> redirectPath)
+                  Just <$> logout authConfig (uri <> redirectPath)
                 _ -> do
                   -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                    Nothing -> redirectForAuth authConfig path uri send
+                    Nothing -> Just <$> redirectForAuth authConfig path uri
                     Just (authCookie, cookies) -> do
                       auth <- validAuth authConfig authCookie
                       case auth of
-                        Nothing -> redirectForAuth authConfig path uri send
+                        Nothing -> Just <$> redirectForAuth authConfig path uri
                         Just token -> do
                           forwardRequest config send authorize cookies addr request token
+          forM_ mResponse (sendResponse send)
           return ((not . isConnectionClose) headers)
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO ()
+forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO (Maybe (Response BodyReader))
 forwardRequest config send authorize cookies addr request@(Request method path headers _) token = do
     groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
-        [] -> accessDenied send (authEmail token)
+        [] -> Just <$> accessDenied (authEmail token)
         _ -> do
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
@@ -183,6 +185,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
               conn <- inputStreamFromHandle h
               response <- readResponse True method conn
               sendResponse send response{responseHeaders = removeConnectionHeader (responseHeaders response)}
+              return Nothing
   where
     host = configBackendAddress config
     port = PortNumber (configBackendPort config)
