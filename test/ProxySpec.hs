@@ -57,7 +57,8 @@ performRequest :: (Request -> Request) -> IO (Response L.ByteString)
 performRequest f = do
   manager <- newManager (mkManagerSettings tlsSettings Nothing)
   request <- f <$> parseUrl "https://localhost:4060"
-  httpLbs request{redirectCount = 0, checkStatus = \_ _ _ -> Nothing} manager
+  r <- timeout 500000 $ httpLbs request{redirectCount = 0, checkStatus = \_ _ _ -> Nothing} manager
+  maybe (expectationFailure "request timed out" >> undefined) return r
 
 tlsSettings :: TLSSettings
 tlsSettings = TLSSettingsSimple {settingDisableCertificateValidation = True, settingDisableSession = False, settingUseServerName = True}
@@ -126,7 +127,7 @@ spec = around withProxy $ do
         conn <- connectTo ctx (ConnectionParams "localhost" 4060 (Just tlsSettings) Nothing)
         cookie <- mkAuthCookie
         connectionPut conn ("GET / HTTP/1.1\r\nCookie: " <> cookie <> "\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-        Just xs <- timeout 100000 (connectionGetAll conn)
+        Just xs <- timeout 500000 (connectionGetAll conn)
         xs `shouldSatisfy` B.isSuffixOf "hello\r\n0\r\n\r\n"
 
     context "when user does not send cookie" $ do
