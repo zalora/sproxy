@@ -52,6 +52,37 @@ Here are the main concepts:
   whether a user is allowed to perform a request. This is often a bit
   surprising, please see the following example:
 
+### Privileges example
+
+Consider this `group_privilege` and `privilege_rule` relations:
+
+group            | privilege | domain
+---------------- | --------- | -----------------
+`readers`        | `basic`   | `wiki.zalora.com`
+`readers`        | `read`    | `wiki.zalora.com`
+`editors`        | `basic`   | `wiki.zalora.com`
+`editors`        | `read`    | `wiki.zalora.com`
+`editors`        | `edit`    | `wiki.zalora.com`
+`administrators` | `basic`   | `wiki.zalora.com`
+`administrators` | `read`    | `wiki.zalora.com`
+`administrators` | `edit`    | `wiki.zalora.com`
+`administrators` | `admin`   | `wiki.zalora.com`
+
+privilege   | domain            | path           | method
+----------- | ----------------- | -------------- | ------
+`basic`     | `wiki.zalora.com` | `/%`           | `GET`
+`read`      | `wiki.zalora.com` | `/wiki/%`      | `GET`
+`edit`      | `wiki.zalora.com` | `/wiki/edit/%` | `%`
+`admin`     | `wiki.zalora.com` | `/admin/%`     | `%`
+
+With this setup, everybody (that is `readers`, `editors` and `administrators`s)
+will have access to e.g. `/imgs/logo.png` and `/favicon.ico`, but only
+administrators will have access to `/admin/index.php`, because the longest
+matching path pattern is `/admin/%` and only `administrator`s have the `admin`
+privilege.
+
+Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
+
 
 ## HTTP headers passed to the back-end server:
 
