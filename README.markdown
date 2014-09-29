@@ -38,6 +38,20 @@ query parameter `state` can be provided to specify an alternate redirect path
 ## Permissions system
 
 Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
+Here are the main concepts:
+
+- A `group` is identified by a name. Every group has
+  - members (identified by email address, through `group_member`) and
+  - associated privileges (through `group_privilege`).
+- A `privilege` is identified by a name _and_ a domain. It has associated rules
+  (through `privilege_rule`) that define what the privilege gives access to.
+- A `rule` is a combination of sql patterns for a `domain`, a `path` and an
+  HTTP `method`. A rule matches an HTTP request, if all of these components
+  match the respective attributes of the request. However of all the matching
+  rules only the rule with the longest `path` pattern will be used to determine
+  whether a user is allowed to perform a request. This is often a bit
+  surprising, please see the following example:
+
 
 ## HTTP headers passed to the back-end server:
 
