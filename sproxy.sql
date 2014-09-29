@@ -111,7 +111,6 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 --
 -- SELECT gp."group" FROM group_privilege gp
 -- INNER JOIN group_member gm ON gm."group" = gp."group"
--- INNER JOIN "group" g ON gp."group" = g."group"
 -- WHERE 'blah@zalora.com' LIKE email
 -- AND 'app3.zalora.com' LIKE "domain"
 -- AND privilege IN (

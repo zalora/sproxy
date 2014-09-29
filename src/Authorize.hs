@@ -56,7 +56,6 @@ authorizedGroups db email domain path method =
   (fmap fromOnly) `fmap` query db [q|
 SELECT gp."group" FROM group_privilege gp
 INNER JOIN group_member gm ON gm."group" = gp."group"
-INNER JOIN "group" g ON gp."group" = g."group"
 WHERE ? LIKE email
 AND ? LIKE "domain"
 AND privilege IN (
