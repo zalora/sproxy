@@ -60,7 +60,7 @@ badRequest :: IO (Response BodyReader)
 badRequest = mkTextResponse badRequest400 "400 Bad Request"
 
 mkResponse :: Status -> [Header] -> ByteString -> IO (Response BodyReader)
-mkResponse status headers_ body = Response status headers <$> fromByteString body
+mkResponse status headers_ body = Response http11 status headers <$> fromByteString body
   where
     headers = ("Content-Length", B.pack . show . B.length $ body) : headers_
 
