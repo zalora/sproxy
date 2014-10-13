@@ -73,3 +73,4 @@ executable sproxy
 
                        sproxy
   default-language:    Haskell2010
+  ghc-options:         -static
