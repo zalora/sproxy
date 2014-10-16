@@ -33,7 +33,6 @@ library
                        bytestring,
                        case-insensitive,
                        certificate,
-                       concurrent-extra,
                        containers >= 0.5,
                        crypto-random,
                        http-conduit,
