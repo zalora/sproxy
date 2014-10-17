@@ -7,7 +7,7 @@ let wrap = ''
       wrapProgram $out/bin/sproxy \
       --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.gcc.gcc}/lib64
     '';
-in {
+in rec {
   build = pkgs.haskellPackages.buildLocalCabalWithArgs {
     inherit src;
     name = "sproxy";
@@ -25,5 +25,15 @@ in {
             ${wrap}
         '';
     };
+  };
+
+  sproxy = pkgs.stdenv.mkDerivation rec {
+    inherit (buildExecutableOnly) version;
+    name = "sproxy-static-${version}";
+    phases = [ "installPhase" ];
+    installPhase = ''
+      mkdir -p $out/bin
+      install ${buildExecutableOnly}/bin/.sproxy-wrapped $out/bin/sproxy
+    '';
   };
 }
