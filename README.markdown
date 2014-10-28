@@ -109,7 +109,7 @@ sproxy --config /path/to/sproxy.yml
 $ cp config/sproxy.yml.example config/sproxy.yml
 ```
 
-Make sure that you have the follwing entry in `/etc/hosts`:
+Make sure that you have the following entry in `/etc/hosts`:
 
 ```
 127.0.2.1       dev.zalora.com
