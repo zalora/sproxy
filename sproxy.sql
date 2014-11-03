@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS "group" (
 -- | regional     |
 -- | SG HQ        |
 
+CREATE EXTENSION IF NOT EXISTS citext;
+
 CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
-  email TEXT NOT NULL,
+  email citext NOT NULL,
   PRIMARY KEY ("group", email)
 );
 
