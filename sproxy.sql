@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS privilege_rule (
   "path" TEXT NOT NULL,
   "method" TEXT NOT NULL,
   FOREIGN KEY ("domain", privilege) REFERENCES privilege ("domain", privilege) ON UPDATE CASCADE ON DELETE CASCADE,
-  PRIMARY KEY ("domain", privilege, "path", "method")
+  PRIMARY KEY ("domain", "path", "method")
 );
 
 -- | domain                | privilege  | path      | method |
