@@ -23,24 +23,22 @@ BEGIN
 	IF FOUND THEN
 		RAISE NOTICE 'The primary key for privilege_rule is already up to date.';
 	ELSE
-		BEGIN
-			ALTER TABLE privilege_rule DROP CONSTRAINT "privilege_rule_pkey";
-			ALTER TABLE privilege_rule ADD PRIMARY KEY ("domain", "path", "method");
-			RAISE NOTICE 'The primary key for privilege_rule has been updated.';
+		ALTER TABLE privilege_rule DROP CONSTRAINT "privilege_rule_pkey";
+		ALTER TABLE privilege_rule ADD PRIMARY KEY ("domain", "path", "method");
+		RAISE NOTICE 'The primary key for privilege_rule has been updated.';
+	END IF;
 
-		EXCEPTION WHEN unique_violation THEN
-			RAISE INFO 'Duplicate privileges exist in privilege_rule.  The following query will reveal all duplicates:
+EXCEPTION WHEN unique_violation THEN
+	RAISE INFO 'Duplicate privileges exist in privilege_rule.  The following query will reveal all duplicates:
 
-	SELECT * FROM privilege_rule AS p1 WHERE exists
-		(SELECT 1 FROM privilege_rule AS p2
+	SELECT * FROM privilege_rule AS p1 WHERE exists (
+		SELECT 1 FROM privilege_rule AS p2
 		WHERE
 			p1.domain = p2.domain
 			AND p1.path = p2.path
 			AND p1.method = p2.method
 		GROUP BY domain, path, method
 		HAVING count(*) > 1);';
-			RAISE 'The primary key for privilege_rule could not be adjusted.';
-		END;
-	END IF;
+	RAISE 'The primary key for privilege_rule could not be adjusted.';
 END;
 $$;
