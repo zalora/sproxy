@@ -97,7 +97,7 @@ test-suite spec
                        resource-pool,
                        yaml >= 0.8,
 
-                       hspec >= 1.5,
+                       hspec == 2.*,
                        wai >= 3.0.0.2,
                        warp >= 3.0.0.3,
                        connection

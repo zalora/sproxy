@@ -91,7 +91,7 @@ connectionGetAll conn = go
         else (bs <>) <$> go
 
 spec :: Spec
-spec = around withProxy $ do
+spec = around_ withProxy $ do
   describe "runProxy" $ do
     it "forwards requests to backend app" $ do
       withBackendMock [] "hello" $ \_ -> do
