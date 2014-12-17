@@ -16,9 +16,7 @@ in rec {
     };
   };
 
-  buildExecutableOnly = pkgs.haskellPackages.buildLocalCabalWithArgs {
-    inherit src;
-    name = "sproxy";
+  buildExecutableOnly = pkgs.haskellPackages.callPackage (import ./sproxy.nix) {
     cabalDrvArgs = {
         postInstall = ''
             rm -rf $out/lib $out/share/doc
