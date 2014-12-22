@@ -1,26 +1,17 @@
 { pkgs ? import <nixpkgs> {}
-, src ? ./. # Eventually want to filter out ignores
+, src ? builtins.filterSource (path: type: let base = baseNameOf path; in
+    type != "unknown" &&
+    base != ".git" && base != "result" && base != "dist" && base != ".cabal-sandbox"
+    ) ./.
 }:
 
-let wrap = ''
-      source ${pkgs.makeWrapper}/nix-support/setup-hook
-      wrapProgram $out/bin/sproxy \
-      --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.gcc.gcc}/lib64
-    '';
-in rec {
-  build = pkgs.haskellPackages.buildLocalCabalWithArgs {
-    inherit src;
-    name = "sproxy";
-    cabalDrvArgs = {
-        postInstall = wrap;
-    };
-  };
-
+rec {
   buildExecutableOnly = pkgs.haskellPackages.callPackage (import ./sproxy.nix) {
     cabalDrvArgs = {
         postInstall = ''
             rm -rf $out/lib $out/share/doc
-            ${wrap}
+            source ${pkgs.makeWrapper}/nix-support/setup-hook
+            wrapProgram $out/bin/sproxy --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.gcc.gcc}/lib64
         '';
     };
   };
