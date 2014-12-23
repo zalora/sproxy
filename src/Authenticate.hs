@@ -33,9 +33,10 @@ import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, withManage
 import qualified Network.HTTP.Conduit as HTTP
 import           Network.HTTP.Toolkit
 
+import qualified System.Logging.Facade as Log
+
 import           Cookies
 import           HTTP
-import qualified Log
 
 data AuthConfig = AuthConfig {
   authConfigCookieDomain :: String

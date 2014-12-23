@@ -1,5 +1,8 @@
 log_level: debug
 
+# this can be stderr or syslog
+log_target: stderr
+
 # The port sproxy listens on (this is always HTTPS).
 listen: 443
 

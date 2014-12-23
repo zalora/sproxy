@@ -22,7 +22,7 @@ library
                        Authorize
                        Cookies
                        HTTP
-                       Log
+                       Logging
                        Proxy
                        Type
                        Util
@@ -35,7 +35,6 @@ library
                        crypto-random,
                        http-conduit,
                        data-default,
-                       hslogger,
                        http-types >= 0.8.5,
                        interpolatedstring-perl6,
                        network,
@@ -54,7 +53,9 @@ library
                        x509,
                        http-kit >= 0.5,
                        resource-pool,
-                       yaml >= 0.8
+                       yaml >= 0.8,
+                       logging-facade,
+                       hsyslog
   default-language:    Haskell2010
   ghc-options:         -Wall -threaded -O2
 
@@ -69,7 +70,7 @@ executable sproxy
 
 test-suite spec
   type:                exitcode-stdio-1.0
-  ghc-options:         -Wall -Werror
+  ghc-options:         -Wall
   hs-source-dirs:      src, test
   main-is:             Spec.hs
   build-depends:       aeson,
@@ -80,7 +81,6 @@ test-suite spec
                        crypto-random,
                        http-conduit,
                        data-default,
-                       hslogger,
                        http-types,
                        interpolatedstring-perl6,
                        network,
@@ -96,6 +96,8 @@ test-suite spec
                        http-kit,
                        resource-pool,
                        yaml >= 0.8,
+                       logging-facade,
+                       hsyslog,
 
                        hspec == 2.*,
                        wai >= 3.0.0.2,

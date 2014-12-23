@@ -15,11 +15,11 @@ import           Network.HTTP.Toolkit
 import           Network.HTTP.Toolkit.Body
 import           Text.InterpolatedString.Perl6 (qc)
 
-import qualified Log
+import qualified System.Logging.Facade as Log
 
 hostHeaderMissing :: Request a -> IO (Response BodyReader)
 hostHeaderMissing r = do
-  Log.warning $ "Host header missing for request: " ++ show (requestMethod r, requestPath r, requestHeaders r)
+  Log.warn $ "Host header missing for request: " ++ show (requestMethod r, requestPath r, requestHeaders r)
   mkTextResponse badRequest400 "400 Bad Request"
 
 authenticationFailed :: String -> IO (Response BodyReader)
