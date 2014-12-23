@@ -34,9 +34,11 @@ import qualified Network.TLS.Extra as TLS
 import System.IO
 import Network.HTTP.Toolkit
 
+import qualified System.Logging.Facade as Log
+
 import Type
 import Util
-import qualified Log
+import Logging
 import Authenticate
 import Cookies
 import Authorize
@@ -53,7 +55,7 @@ data Config = Config {
 -- the server
 run :: ConfigFile -> AuthorizeAction -> IO ()
 run cf authorize = do
-  Log.setup (cfLogLevel cf)
+  Logging.setup (cfLogLevel cf) (cfLogTarget cf)
   clientSecret <- strip <$> readFile (cfClientSecretFile cf)
   authTokenKey <- readFile (cfAuthTokenKeyFile cf)
   credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)

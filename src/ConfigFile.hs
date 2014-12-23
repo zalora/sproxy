@@ -1,4 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module ConfigFile where
 
 import           Control.Applicative
@@ -8,8 +11,8 @@ import           System.IO
 import           System.Exit
 import           Data.Aeson
 import           Data.Yaml
-import           System.Log.Logger
 import           Network (PortNumber)
+import System.Logging.Facade.Types
 
 withConfigFile :: FilePath -> (ConfigFile -> IO a) -> IO a
 withConfigFile configFile action = do
@@ -20,8 +23,13 @@ withConfigFile configFile action = do
       exitFailure
     Right config -> action config
 
+
+data LogTarget = Stderr | Syslog
+  deriving (Eq, Show)
+
 data ConfigFile = ConfigFile {
-  cfLogLevel :: Priority
+  cfLogLevel :: LogLevel
+, cfLogTarget :: LogTarget
 , cfListen :: PortNumber
 , cfRedirectHttpToHttps :: Bool
 , cfCookieDomain :: String
@@ -39,6 +47,7 @@ data ConfigFile = ConfigFile {
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
         (m .: "log_level" >>= parseLogLevel)
+    <*> (m .: "log_target" >>= parseLogTarget)
     <*> (fromInteger <$> m .: "listen")
     <*> (m .: "redirect_http_to_https")
     <*> m .: "cookie_domain"
@@ -53,7 +62,15 @@ instance FromJSON ConfigFile where
     <*> (fromInteger <$> m .: "backend_port")
   parseJSON _ = empty
 
-parseLogLevel :: String -> Parser Priority
+deriving instance Read LogLevel
+
+parseLogLevel :: String -> Parser LogLevel
 parseLogLevel s = (maybe err return . readMaybe . map toUpper) s
   where
     err = fail ("invalid log_level " ++ show s)
+
+parseLogTarget :: String -> Parser LogTarget
+parseLogTarget s = case s of
+  "stderr" -> return Stderr
+  "syslog" -> return Syslog
+  _ -> fail ("invalid log_target " ++ show s)
