@@ -12,7 +12,7 @@ import           System.Exit
 import           Data.Aeson
 import           Data.Yaml
 import           Network (PortNumber)
-import System.Logging.Facade.Types
+import           System.Logging.LogSink.Config
 
 withConfigFile :: FilePath -> (ConfigFile -> IO a) -> IO a
 withConfigFile configFile action = do
@@ -22,10 +22,6 @@ withConfigFile configFile action = do
       hPutStrLn stderr ("error parsing configuration file " ++ configFile ++ ": " ++ show err)
       exitFailure
     Right config -> action config
-
-
-data LogTarget = Stderr | Syslog
-  deriving (Eq, Show)
 
 data ConfigFile = ConfigFile {
   cfLogLevel :: LogLevel
@@ -71,6 +67,6 @@ parseLogLevel s = (maybe err return . readMaybe . map toUpper) s
 
 parseLogTarget :: String -> Parser LogTarget
 parseLogTarget s = case s of
-  "stderr" -> return Stderr
-  "syslog" -> return Syslog
+  "stderr" -> return StdErr
+  "syslog" -> return SysLog
   _ -> fail ("invalid log_target " ++ show s)
