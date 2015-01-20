@@ -7,6 +7,7 @@
 
 rec {
   buildExecutableOnly = pkgs.haskellPackages.callPackage (import ./sproxy.nix) {
+    inherit src;
     cabalDrvArgs = {
         postInstall = ''
             rm -rf $out/lib $out/share/doc
