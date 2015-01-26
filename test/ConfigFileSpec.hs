@@ -1,7 +1,7 @@
 module ConfigFileSpec (main, spec) where
 
 import           Test.Hspec
-import           System.Logging.Facade.Types
+import           System.Logging.LogSink.Config
 
 import           ConfigFile
 
@@ -13,7 +13,7 @@ spec = do
   describe "withConfigFile" $ do
     let conf = ConfigFile {
             cfLogLevel = DEBUG
-          , cfLogTarget = Stderr
+          , cfLogTarget = StdErr
           , cfListen = 443
           , cfRedirectHttpToHttps = True
           , cfCookieDomain = "dev.zalora.com"
