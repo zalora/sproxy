@@ -42,7 +42,6 @@ library
                        interpolatedstring-perl6,
                        mtl,
                        network,
-                       postgresql-simple,
                        safe,
                        SHA,
                        split,
@@ -58,7 +57,6 @@ library
                        utf8-string,
                        x509,
                        http-kit >= 0.5,
-                       resource-pool,
                        yaml >= 0.8
   default-language:    Haskell2010
   ghc-options:         -Wall -threaded -O2

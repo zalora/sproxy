@@ -6,7 +6,6 @@ module Network.HTTP.SProxy (
 , ConfigFile(..)
 
 -- * Authorization
-, withDatabaseAuthorizeAction
 , AuthorizeAction
 , Email
 , Domain

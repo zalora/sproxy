@@ -3,7 +3,7 @@
 { cabal, aeson, attoparsec, caseInsensitive, certificate
 , cryptoRandom, dataDefault, hslogger, httpConduit, httpKit
 , httpTypes, interpolatedstringPerl6, mtl, network
-, optparseApplicative, postgresqlSimple, resourcePool, safe, SHA
+, optparseApplicative, safe, SHA
 , split, stringConversions, time, tls, unorderedContainers
 , utf8String, x509, yaml, cabalDrvArgs
 , src
@@ -19,7 +19,7 @@ cabal.mkDerivation (self: cabalDrvArgs // {
     aeson attoparsec caseInsensitive certificate cryptoRandom
     dataDefault hslogger httpConduit httpKit httpTypes
     interpolatedstringPerl6 mtl network optparseApplicative
-    postgresqlSimple resourcePool safe SHA split stringConversions time
+    safe SHA split stringConversions time
     tls unorderedContainers utf8String x509 yaml
   ];
   meta = {
