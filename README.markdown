@@ -35,6 +35,17 @@ query parameter `state` can be provided to specify an alternate redirect path
 (the path has to be percent-encoded, e.g. with `urlEncode` from
 `Network.HTTP.Types.URI`).
 
+## Robots
+
+Since all sproxied resources are private, it doesn't make sense for web crawlers
+to try to index them. In fact, crawlers will index only the Google authentication
+page. To prevent this, sproxy returns the following for `/robots.txt`:
+
+```
+User-agent: *
+Disallow: /
+```
+
 ## Permissions system
 
 Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
@@ -113,7 +124,7 @@ $ cp config/sproxy.yml.example config/sproxy.yml
 Make sure that you have the following entry in `/etc/hosts`:
 
 ```
-127.0.2.1       dev.zalora.com
+127.0.0.1       dev.zalora.com
 ```
 
 

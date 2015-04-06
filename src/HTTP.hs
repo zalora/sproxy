@@ -5,6 +5,8 @@ module HTTP (
 , accessDenied
 , badRequest
 , mkResponse
+, mkTextResponse
+, mkHtmlResponse
 ) where
 
 import           Control.Applicative
