@@ -150,6 +150,8 @@ serve config authConfig authorize addr sock = do
                     Just code -> Just <$> authenticate authConfig uri redirectPath code
                 ["sproxy", "logout"] -> do
                   Just <$> logout authConfig (uri <> redirectPath)
+                -- sproxy sites are private by design. It doesn't make sense to index the authentication page.
+                ["robots.txt"] -> Just <$> mkTextResponse ok200 "User-agent: *\nDisallow: /"
                 _ -> do
                   -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
