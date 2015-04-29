@@ -10,7 +10,7 @@
         postInstall = ''
             source ${pkgs.makeWrapper}/nix-support/setup-hook
             wrapProgram $out/bin/sproxy \
-            --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.gcc.gcc}/lib64
+            --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.cc.cc}/lib64
         '';
     };
   };
