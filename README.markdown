@@ -86,13 +86,14 @@ Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
 
 ## HTTP headers passed to the back-end server:
 
-header            | value
------------------ | -----
-`From:`           | visitor's email address
-`X-Groups:`       | all groups that granted access to this resource, separated by commas
-`X-Given-Name:`   | the visitor's given (first) name
-`X-Family-Name:`  | the visitor's family (last) name
-`X-Forwarded-For` | the visitor's IP address (added to the end of the list if header is already present in client request)
+header               | value
+-------------------- | -----
+`From:`              | visitor's email address
+`X-Groups:`          | all groups that granted access to this resource, separated by commas
+`X-Given-Name:`      | the visitor's given (first) name
+`X-Family-Name:`     | the visitor's family (last) name
+`X-Forwarded-Proto:` | the visitor's protocol of an HTTP request, always `https`
+`X-Forwarded-For`    | the visitor's IP address (added to the end of the list if header is already present in client request)
 
 ## Configuration File
 

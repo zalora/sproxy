@@ -178,6 +178,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
                     insert "X-Groups" (cs $ intercalate "," groups) $
                     insert "X-Given-Name" (cs $ fst $ authName token) $
                     insert "X-Family-Name" (cs $ snd $ authName token) $
+                    insert "X-Forwarded-Proto" "https" $
                     addForwardedForHeader ip $
                     insert "Connection" "close" $
                     setCookies $
