@@ -47,7 +47,7 @@ library
                        -- least not the way that HsOpenSSL uses it in
                        -- my testing (segfaults), so I'm using the
                        -- Haskell-native tls library instead.
-                       tls >= 1.2,
+                       tls >= 1.3.3,
                        unix,
                        utf8-string,
                        x509,

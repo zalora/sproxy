@@ -115,12 +115,11 @@ redirectToHttps _ sock = do
 -- - redirecting requests to localhost:8080
 serve :: Config -> AuthConfig -> AuthorizeAction -> SockAddr -> Socket -> IO ()
 serve config authConfig authorize addr sock = do
-  rng <- cprgCreate <$> createEntropyPool :: IO SystemRNG
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
                    , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS10, TLS.TLS11, TLS.TLS12]
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
-  ctx <- TLS.contextNew sock params rng
+  ctx <- TLS.contextNew sock params
   TLS.handshake ctx
   conn <- makeInputStream (TLS.recvData ctx)
   serve_ (TLS.sendData ctx . BL.fromStrict) conn
