@@ -64,9 +64,9 @@ executable sproxy
   hs-source-dirs:      driver
   build-depends:       base == 4.*,
                        optparse-applicative,
-
                        sproxy
   default-language:    Haskell2010
+  ghc-options:         -Wall -static
 
 test-suite spec
   type:                exitcode-stdio-1.0
