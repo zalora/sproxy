@@ -3,7 +3,6 @@ module ProxySpec (main, spec) where
 
 import           Test.Hspec
 
-import           Control.Applicative
 import           Control.Exception
 import           Control.Concurrent
 import           System.Timeout

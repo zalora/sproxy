@@ -7,7 +7,6 @@ module Proxy (
 , runProxy
 ) where
 
-import Control.Applicative
 import Control.Monad hiding (forM_)
 import Data.Foldable (forM_)
 import Control.Concurrent
@@ -16,7 +15,6 @@ import System.IO.Error
 import GHC.IO.Exception
 import Data.Monoid
 import Data.Typeable (typeOf)
-import Crypto.Random (createEntropyPool, CPRG(..), SystemRNG)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)

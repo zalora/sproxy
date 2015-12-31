@@ -9,7 +9,6 @@ module HTTP (
 , mkHtmlResponse
 ) where
 
-import           Control.Applicative
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
 import           Network.HTTP.Types

@@ -3,7 +3,6 @@ module UtilSpec (main, spec) where
 
 import           Test.Hspec
 
-import           Control.Applicative
 import qualified Data.Map as Map
 import           Network.Socket
 

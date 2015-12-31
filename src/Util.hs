@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Util where
 
-import           Control.Applicative
 import           Data.Char
 import           Data.String
 import           Data.Monoid

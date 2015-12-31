@@ -31,7 +31,7 @@ import           Network.HTTP.Types
 import           System.Posix.Types (EpochTime)
 import           System.Posix.Time (epochTime)
 import           Data.Digest.Pure.SHA (hmacSha1, showDigest)
-import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, withManager, RequestBody(..))
+import           Network.HTTP.Conduit (simpleHttp, parseUrl, httpLbs, RequestBody(..))
 import qualified Network.HTTP.Conduit as HTTP
 import           Network.HTTP.Toolkit
 
@@ -144,8 +144,15 @@ logout config url = do
 
 post :: String -> ByteString -> IO (HTTP.Response BL8.ByteString)
 post url body = do
-  r <- parseUrl url
-  withManager $ httpLbs r {HTTP.method = "POST", HTTP.requestBody = RequestBodyBS body, HTTP.requestHeaders = [("Content-Type", "application/x-www-form-urlencoded")]}
+  r' <- parseUrl url
+  let r = r' { HTTP.method = "POST"
+             , HTTP.requestBody = RequestBodyBS body
+             , HTTP.requestHeaders
+               = [ ("Content-Type" , "application/x-www-form-urlencoded")
+                 ]
+             }
+  manager <- HTTP.newManager HTTP.tlsManagerSettings
+  httpLbs r manager
 
 validAuth :: AuthConfig -> String -> IO (Maybe AuthToken)
 validAuth config token =

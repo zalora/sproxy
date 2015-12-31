@@ -10,7 +10,6 @@ module Cookies (
 , invalidateCookie
 ) where
 
-import           Data.Monoid
 import           Data.String
 import           Control.Applicative
 import qualified Data.ByteString as BS
