@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 -- If you just want to know if a user has access or not, you can
 -- change the first line to:
 --
--- SELECT COUNT(*) > ) FROM group_privilege gp
+-- SELECT COUNT(*) > 0 FROM group_privilege gp
 --
 -- Note for the future: If you want to support wildcards that match
 -- only a single path component (e.g. app1.zalora.com/user/:/email),
