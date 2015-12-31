@@ -115,7 +115,7 @@ serve :: Config -> AuthConfig -> AuthorizeAction -> SockAddr -> Socket -> IO ()
 serve config authConfig authorize addr sock = do
   -- TODO: Work in the intermediate certificates.
   let params = def { TLS.serverShared = def { TLS.sharedCredentials = TLS.Credentials [configTLSCredential config] }
-                   , TLS.serverSupported = def { TLS.supportedVersions = [TLS.SSL3, TLS.TLS10, TLS.TLS11, TLS.TLS12]
+                   , TLS.serverSupported = def { TLS.supportedVersions = [TLS.TLS10, TLS.TLS11, TLS.TLS12]
                                                , TLS.supportedCiphers = TLS.ciphersuite_all } }
   ctx <- TLS.contextNew sock params
   TLS.handshake ctx
