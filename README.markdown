@@ -100,11 +100,23 @@ Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
 header               | value
 -------------------- | -----
 `From:`              | visitor's email address
-`X-Groups:`          | all groups that granted access to this resource, separated by commas
+`X-Groups:`          | all groups that granted access to this resource, separated by commas (see the note below)
 `X-Given-Name:`      | the visitor's given (first) name
 `X-Family-Name:`     | the visitor's family (last) name
 `X-Forwarded-Proto:` | the visitor's protocol of an HTTP request, always `https`
 `X-Forwarded-For`    | the visitor's IP address (added to the end of the list if header is already present in client request)
+
+
+`X-Groups` denotes an intersection of the groups the visitor belongs to and the groups that granted access:
+
+Visitor's groups | Granted groups | `X-Groups`
+---------------- | -------------- | ---------
+all              | all, devops    | all
+all, devops      | all            | all
+all, devops      | all, devops    | all,devops
+all, devops      | devops         | devops
+devops           | all, devops    | devops
+devops           | all            | Access denied
 
 ## Configuration File
 
