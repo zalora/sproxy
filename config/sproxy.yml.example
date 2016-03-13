@@ -17,10 +17,6 @@ cookie_name: sproxy-dev
 client_id: a611zak494jxdgdn6ltlkn547rme91ig.apps.googleusercontent.com
 client_secret: config/client_secret
 
-# The auth token key should have a minimum of 160 bits of randomness.
-# `openssl rand -base64 160` is a good candidate
-auth_token_key: config/auth_token_key.example
-
 ssl_key: config/server.key.example
 
 # Include extra (intermediate) certs in a single file. Make sure that they're sorted from server downward, i.e.:

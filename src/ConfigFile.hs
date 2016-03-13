@@ -32,7 +32,6 @@ data ConfigFile = ConfigFile {
 , cfCookieName :: String
 , cfClientID :: String
 , cfClientSecretFile :: FilePath
-, cfAuthTokenKeyFile :: FilePath
 , cfSslKey :: FilePath
 , cfSslCerts :: FilePath
 , cfDatabase :: String
@@ -50,7 +49,6 @@ instance FromJSON ConfigFile where
     <*> m .: "cookie_name"
     <*> m .: "client_id"
     <*> m .: "client_secret"
-    <*> m .: "auth_token_key"
     <*> m .: "ssl_key"
     <*> m .: "ssl_certs"
     <*> m .: "database"

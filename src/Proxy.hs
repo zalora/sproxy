@@ -15,7 +15,7 @@ import System.IO.Error
 import GHC.IO.Exception
 import Data.Monoid
 import Data.Typeable (typeOf)
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)
 import Data.List (intercalate)
@@ -30,6 +30,8 @@ import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 import System.IO
+import System.Entropy (getEntropy)
+import qualified Data.ByteString.Base64 as Base64
 import Network.HTTP.Toolkit
 
 import qualified System.Logging.Facade as Log
@@ -55,8 +57,8 @@ run :: ConfigFile -> AuthorizeAction -> IO ()
 run cf authorize = do
   Logging.setup (cfLogLevel cf) (cfLogTarget cf)
   clientSecret <- strip <$> readFile (cfClientSecretFile cf)
-  authTokenKey <- readFile (cfAuthTokenKeyFile cf)
-  credential <- either error reverseCerts `fmap` TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
+  authTokenKey <- B8.unpack . Base64.encode <$> getEntropy 32
+  credential <- either error reverseCerts <$> TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
 
   let authConfig = AuthConfig {
           authConfigCookieDomain = cfCookieDomain cf
@@ -183,7 +185,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
                     setCookies $
                     fromList headers
             bracket (connectTo host port) hClose $ \h -> do
-              sendRequest (B.hPutStr h) request{requestHeaders = downStreamHeaders}
+              sendRequest (B8.hPutStr h) request{requestHeaders = downStreamHeaders}
               conn <- inputStreamFromHandle h
               response <- readResponse True method conn
               sendResponse send response{responseHeaders = removeConnectionHeader (responseHeaders response)}

@@ -20,7 +20,6 @@ spec = do
           , cfCookieName = "sproxy-dev"
           , cfClientID = "a611zak494jxdgdn6ltlkn547rme91ig.apps.googleusercontent.com"
           , cfClientSecretFile = "config/client_secret"
-          , cfAuthTokenKeyFile = "config/auth_token_key.example"
           , cfSslKey = "config/server.key.example"
           , cfSslCerts = "config/server.crt.example"
           , cfDatabase = "user=you dbname=sproxy"
