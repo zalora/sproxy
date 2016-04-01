@@ -3,7 +3,8 @@ version:             0.9.1
 license:             MIT
 license-file:        LICENSE
 copyright:           Zalora South East Asia Pte. Ltd
-author:              Chris Forno <jekor@jekor.com>
+author:              Chris Forno <jekor@jekor.com>,
+                     Simon Hengel <sol@typeful.net>
 maintainer:          Igor Pashev <pashev.igor@gmail.com>
 category:            Web
 build-type:          Simple
