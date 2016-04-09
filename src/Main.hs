@@ -1,8 +1,13 @@
-module Main where
+module Main
+(
+  main
+) where
 
-import           Options.Applicative
+import Options.Applicative
 
-import           Network.HTTP.SProxy
+import Authorize (withDatabaseAuthorizeAction)
+import ConfigFile (withConfigFile, ConfigFile(..))
+import Proxy (run)
 
 main :: IO ()
 main = do
