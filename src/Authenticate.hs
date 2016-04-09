@@ -11,9 +11,6 @@ module Authenticate (
 
 -- exported to silence warnings
 , AccessToken(..)
-
--- exported for testing
-, authToken
 ) where
 
 import           Control.Applicative

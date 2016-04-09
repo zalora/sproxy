@@ -1,10 +1,6 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Proxy (
   run
-
--- exported for testing
-, Config(..)
-, runProxy
 ) where
 
 import Control.Monad hiding (forM_)
