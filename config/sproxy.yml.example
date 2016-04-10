@@ -40,7 +40,10 @@ database: "user=you dbname=sproxy"
 # To initialize/populate the DB, see sproxy.sql.
 
 # Which backend should sproxy relay the requests to?
-# Default is 127.0.0.1:8080
+# Default is 127.0.0.1:8080, ignored if backend_socket is set
 # backend_address: "127.0.0.1"
 # backend_port: 8080
+
+# If specified, connect to this UNIX-socket instead of TCP
+# backend_socket: "/tmp/foo.sock"
 

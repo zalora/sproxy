@@ -66,8 +66,18 @@ run cf authorize = do
       config = Config {
           configTLSCredential = credential
         , configBackendAddress = cfBackendAddress cf
-        , configBackendPortID = PortNumber . fromIntegral $ cfBackendPort cf
+        , configBackendPortID =
+            case cfBackendSocket cf of
+              Just path -> UnixSocket path
+              _ -> PortNumber . fromIntegral $ cfBackendPort cf
         }
+
+  case configBackendPortID config of
+    UnixSocket path -> hPutStrLn stderr $ "Forwarding to UNIX socket " ++ path
+    PortNumber p -> hPutStrLn stderr $ "Forwarding to "
+                       ++ configBackendAddress config ++ ":"
+                       ++ show p
+    _ -> return () -- XXX can't happen
 
   mvar <- newEmptyMVar
 

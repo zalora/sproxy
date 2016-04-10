@@ -37,6 +37,7 @@ data ConfigFile = ConfigFile {
 , cfDatabase :: String
 , cfBackendAddress :: String
 , cfBackendPort :: Word16
+, cfBackendSocket :: Maybe String
 } deriving (Eq, Show)
 
 instance FromJSON ConfigFile where
@@ -54,6 +55,7 @@ instance FromJSON ConfigFile where
     <*> m .: "database"
     <*> m .:? "backend_address" .!= "127.0.0.1"
     <*> m .:? "backend_port" .!= 8080
+    <*> m .:? "backend_socket"
   parseJSON _ = empty
 
 deriving instance Read LogLevel
