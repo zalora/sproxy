@@ -135,3 +135,14 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 --
 -- But you'd also have to escape any regexp special characters in the
 -- url as well (i.e. dots).
+
+-- Example data for development:
+/*
+  INSERT INTO domain (domain) VALUES ('dev.zalora.com');
+  INSERT INTO "group" ("group") VALUES ('dev');
+  INSERT INTO group_member ("group", email) VALUES ('dev', '%');
+  INSERT INTO privilege (domain, privilege) VALUES ('dev.zalora.com', 'full');
+  INSERT INTO group_privilege ("group", domain, privilege) VALUES ('dev', 'dev.zalora.com', 'full');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('dev.zalora.com', 'full', '%', '%');
+*/
+
