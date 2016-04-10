@@ -6,12 +6,12 @@ module ConfigFile where
 
 import           Control.Applicative
 import           Data.Char
+import           Data.Word
 import           Text.Read
 import           System.IO
 import           System.Exit
 import           Data.Aeson
 import           Data.Yaml
-import           Network (PortNumber)
 import           System.Logging.LogSink.Config
 
 withConfigFile :: FilePath -> (ConfigFile -> IO a) -> IO a
@@ -26,8 +26,8 @@ withConfigFile configFile action = do
 data ConfigFile = ConfigFile {
   cfLogLevel :: LogLevel
 , cfLogTarget :: LogTarget
-, cfListen :: PortNumber
-, cfRedirectHttpToHttps :: Bool
+, cfListen :: Word16
+, cfRedirectHttpToHttps :: Maybe Bool
 , cfCookieDomain :: String
 , cfCookieName :: String
 , cfClientID :: String
@@ -36,15 +36,15 @@ data ConfigFile = ConfigFile {
 , cfSslCerts :: FilePath
 , cfDatabase :: String
 , cfBackendAddress :: String
-, cfBackendPort :: PortNumber
+, cfBackendPort :: Word16
 } deriving (Eq, Show)
 
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
         (m .: "log_level" >>= parseLogLevel)
-    <*> (m .: "log_target" >>= parseLogTarget)
-    <*> (fromInteger <$> m .: "listen")
-    <*> (m .: "redirect_http_to_https")
+    <*> (m .:? "log_target" .!= "stderr" >>= parseLogTarget)
+    <*> m .:? "listen" .!= 443
+    <*> m .:? "redirect_http_to_https"
     <*> m .: "cookie_domain"
     <*> m .: "cookie_name"
     <*> m .: "client_id"
@@ -52,8 +52,8 @@ instance FromJSON ConfigFile where
     <*> m .: "ssl_key"
     <*> m .: "ssl_certs"
     <*> m .: "database"
-    <*> m .: "backend_address"
-    <*> (fromInteger <$> m .: "backend_port")
+    <*> m .:? "backend_address" .!= "127.0.0.1"
+    <*> m .:? "backend_port" .!= 8080
   parseJSON _ = empty
 
 deriving instance Read LogLevel
@@ -68,3 +68,4 @@ parseLogTarget s = case s of
   "stderr" -> return StdErr
   "syslog" -> return SysLog
   _ -> fail ("invalid log_target " ++ show s)
+

@@ -20,7 +20,7 @@ import Data.Map as Map (fromList, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Network (PortID(..), listenOn, sClose, connectTo)
-import Network.Socket (Socket, SockAddr, PortNumber, accept, close)
+import Network.Socket (Socket, SockAddr, accept, close)
 import qualified Network.Socket.ByteString as Socket
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
@@ -44,7 +44,7 @@ import HTTP
 data Config = Config {
   configTLSCredential :: TLS.Credential
 , configBackendAddress :: String
-, configBackendPort :: PortNumber
+, configBackendPortID :: PortID
 } deriving (Eq, Show)
 
 -- | Reads the configuration file and the ssl certificate files and starts
@@ -66,18 +66,25 @@ run cf authorize = do
       config = Config {
           configTLSCredential = credential
         , configBackendAddress = cfBackendAddress cf
-        , configBackendPort = cfBackendPort cf
+        , configBackendPortID = PortNumber . fromIntegral $ cfBackendPort cf
         }
 
   mvar <- newEmptyMVar
 
   -- Immediately fork a new thread for accepting connections since
   -- the main thread is special and expensive to communicate with.
-  void . forkIO $ (runProxy (cfListen cf) config authConfig authorize `catch` logException) `finally` putMVar mvar ()
+  void . forkIO $ (runProxy (PortNumber . fromIntegral $ cfListen cf)
+                            config authConfig authorize `catch` logException)
+                 `finally` putMVar mvar ()
 
   -- Listen on port 80 just to redirect everything to HTTPS.
-  when (cfRedirectHttpToHttps cf) $ do
-    void . forkIO $ listen 80 redirectToHttps `catch` logException
+  let listen80 =
+        case cfRedirectHttpToHttps cf of
+          Just True -> True
+          _         -> 443 == cfListen cf
+
+  when listen80 $
+    void . forkIO $ listen (PortNumber 80) redirectToHttps `catch` logException
 
   takeMVar mvar
   where
@@ -85,7 +92,7 @@ run cf authorize = do
     -- but the tls library expects them in the opposite order.
     reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
-runProxy :: PortNumber -> Config -> AuthConfig -> AuthorizeAction -> IO ()
+runProxy :: PortID -> Config -> AuthConfig -> AuthorizeAction -> IO ()
 runProxy port config authConfig authorize = (listen port (serve config authConfig authorize))
 
 -- | Redirects requests to https.
@@ -180,7 +187,7 @@ forwardRequest config send authorize cookies addr request@(Request method path h
                     insert "Connection" "close" $
                     setCookies $
                     fromList headers
-            bracket (connectTo host port) hClose $ \h -> do
+            bracket (connectTo host portID) hClose $ \h -> do
               sendRequest (B8.hPutStr h) request{requestHeaders = downStreamHeaders}
               conn <- inputStreamFromHandle h
               response <- readResponse True method conn
@@ -188,13 +195,20 @@ forwardRequest config send authorize cookies addr request@(Request method path h
               return Nothing
   where
     host = configBackendAddress config
-    port = PortNumber (configBackendPort config)
+    portID = configBackendPortID config
     setCookies = case cookies of
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
 
-listen :: PortNumber -> (SockAddr -> Socket -> IO ()) -> IO ()
-listen port action = bracket (listenOn $ PortNumber port) sClose $ \serverSock -> forever $ do
+listen :: PortID -> (SockAddr -> Socket -> IO ()) -> IO ()
+listen port action =
+  bracket
+  ( do
+    sock <- listenOn port
+    hPutStrLn stderr $ "Listening on " ++ show port
+    return sock )
+  sClose $
+  \serverSock -> forever $ do
   (sock, addr) <- accept serverSock
   forkIO $ (action addr sock `finally` close sock) `catch` exceptionHandler
   where
@@ -211,3 +225,4 @@ isException e v = fromMaybe False $ (== v) <$> fromException e
 
 isResourceVanished :: SomeException -> Bool
 isResourceVanished = fromMaybe False . fmap ((== ResourceVanished) . ioeGetErrorType) . fromException
+

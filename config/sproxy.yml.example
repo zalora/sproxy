@@ -1,14 +1,17 @@
 log_level: debug
 
-# this can be stderr or syslog
-log_target: stderr
+# syslog / stderr
+# Default is stderr.
+# log_target: stderr
 
 # The port sproxy listens on (this is always HTTPS).
-listen: 443
+# Default is 443
+# listen: 443
 
-# If 'yes', sproxy will open port 80 and redirect HTTP requests to
-# HTTPS (port 443)
-redirect_http_to_https: yes
+# yes / no
+# If 'yes', sproxy will open port 80 and redirect HTTP requests
+# to the above listen port. Default is "yes" if listen is 443
+# redirect_http_to_https: yes
 
 cookie_domain: dev.zalora.com
 cookie_name: sproxy-dev
@@ -31,11 +34,13 @@ ssl_key: config/server.key.example
 # -----END CERTIFICATE-----
 ssl_certs: config/server.crt.example
 
-# PostgreSQL database (connection string)
+# PostgreSQL database connection string
 database: "user=you dbname=sproxy"
 
 # To initialize/populate the DB, see sproxy.sql.
 
 # Which backend should sproxy relay the requests to?
-backend_address: "127.0.0.1"
-backend_port: 8080
+# Default is 127.0.0.1:8080
+# backend_address: "127.0.0.1"
+# backend_port: 8080
+
