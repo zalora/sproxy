@@ -103,7 +103,7 @@ run cf authorize = do
     reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
 runProxy :: PortID -> Config -> AuthConfig -> AuthorizeAction -> IO ()
-runProxy port config authConfig authorize = (listen port (serve config authConfig authorize))
+runProxy port config authConfig authorize = listen port (serve config authConfig authorize)
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
@@ -116,8 +116,7 @@ redirectToHttps _ sock = do
       let location = uri <> requestPath request
       Log.debug ("Redirecting HTTP request to " ++ show location)
       simpleResponse send seeOther303 [("Location", location)] ""
-    Nothing -> do
-      hostHeaderMissing request >>= sendResponse send
+    Nothing -> hostHeaderMissing request >>= sendResponse send
   where
     send = Socket.sendAll sock
 
@@ -150,29 +149,27 @@ serve config authConfig authorize addr sock = do
         handleOne = do
           request@(Request _ path headers _) <- readRequest True conn
           mResponse <- case baseUri (requestHeaders request) of
-            Nothing -> do
-              Just <$> hostHeaderMissing request
+            Nothing -> Just <$> hostHeaderMissing request
             Just uri -> do
               let (segments, query) = (decodePath . extractPath) path
               let redirectPath = fromMaybe "/" $ join $ lookup "state" query
               case segments of
-                ["sproxy", "oauth2callback"] -> do
+                ["sproxy", "oauth2callback"] ->
                   case join $ lookup "code" query of
                     Nothing -> Just <$> badRequest
                     Just code -> Just <$> authenticate authConfig uri redirectPath code
-                ["sproxy", "logout"] -> do
+                ["sproxy", "logout"] ->
                   Just <$> logout authConfig (uri <> redirectPath)
                 -- sproxy sites are private by design. It doesn't make sense to index the authentication page.
                 ["robots.txt"] -> Just <$> mkTextResponse ok200 "User-agent: *\nDisallow: /"
-                _ -> do
-                  -- Check for an auth cookie.
+                _ -> -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
                     Nothing -> Just <$> redirectForAuth authConfig path uri
                     Just (authCookie, cookies) -> do
                       auth <- validAuth authConfig authCookie
                       case auth of
                         Nothing -> Just <$> redirectForAuth authConfig path uri
-                        Just token -> do
+                        Just token ->
                           forwardRequest config send authorize cookies addr request token
           forM_ mResponse (sendResponse send)
           return ((not . isConnectionClose) headers)
@@ -234,5 +231,5 @@ isException :: (Eq a, Exception a) => SomeException -> a -> Bool
 isException e v = fromMaybe False $ (== v) <$> fromException e
 
 isResourceVanished :: SomeException -> Bool
-isResourceVanished = fromMaybe False . fmap ((== ResourceVanished) . ioeGetErrorType) . fromException
+isResourceVanished = maybe False ((== ResourceVanished) . ioeGetErrorType) . fromException
 

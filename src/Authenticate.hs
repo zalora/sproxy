@@ -67,7 +67,7 @@ data AuthToken = AuthToken {
 
 -- Here is the format of the actual cookie we send to the client.
 instance Show AuthToken where
-  show a = authEmail a ++ ":" ++ authNameString (authName a) ++ ":" ++ show (authExpiry a) ++ ":" ++ (authDigest a)
+  show a = authEmail a ++ ":" ++ authNameString (authName a) ++ ":" ++ show (authExpiry a) ++ ":" ++ authDigest a
     where authNameString (given, family) = given ++ ":" ++ family
 
 instance Read AuthToken where
@@ -106,18 +106,21 @@ redirectForAuth c path baseUri = mkResponse found302 [("Location", authUrl path 
 authenticate :: AuthConfig -> ByteString -> ByteString -> ByteString -> IO (Response BodyReader)
 authenticate config baseUri path code = do
   Log.info ("authentication request with code " ++ show code)
-  tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token" (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri=" ++ cs (redirectUri baseUri) ++ "&grant_type=authorization_code")
+  tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token"
+              (cs $ "code=" ++ cs code ++ "&client_id=" ++ clientID
+                ++ "&client_secret=" ++ clientSecret ++ "&redirect_uri="
+                ++ cs (redirectUri baseUri) ++ "&grant_type=authorization_code")
   case tokenRes of
     Left err -> authenticationFailed ("error while authenticating: " ++ show (err :: HTTP.HttpException))
-    Right resp -> do
+    Right resp ->
       case decode (HTTP.responseBody resp) of
-        Nothing -> do
+        Nothing ->
           authenticationFailed "Received an invalid response from Google's authentication server."
         Just token -> do
           infoRes <- try $ simpleHttp ("https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken token)
           case infoRes of
             Left err -> authenticationFailed ("error while retrieving user info: " ++ show (err :: HTTP.HttpException))
-            Right body -> do
+            Right body ->
               case decode body of
                 Nothing -> authenticationFailed "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do

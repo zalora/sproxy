@@ -33,5 +33,5 @@ baseUri headers = ("https://" <>) <$> lookup "Host" headers
 isConnectionClose :: [Header] -> Bool
 isConnectionClose = any p
   where
-    p (k, v) = k == hConnection && (B.map toLower $ stripBS v) == "close"
+    p (k, v) = k == hConnection && B.map toLower (stripBS v) == "close"
     stripBS = B.reverse . B.dropWhile isSpace . B.reverse . B.dropWhile isSpace

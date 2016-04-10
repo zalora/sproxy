@@ -53,7 +53,7 @@ withDatabaseAuthorizeAction database action = withConnectionPool database $ \poo
 
 authorizedGroups :: Connection -> AuthorizeAction
 authorizedGroups db email domain path method =
-  (fmap fromOnly) `fmap` query db [q|
+  fmap fromOnly `fmap` query db [q|
 SELECT gp."group" FROM group_privilege gp
 INNER JOIN group_member gm ON gm."group" = gp."group"
 WHERE ? LIKE email

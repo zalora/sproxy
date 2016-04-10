@@ -73,10 +73,11 @@ headerToCookies (name, val) acc
    cookie = (,) <$> word <*> (skipSpace *> "=" *> skipSpace *> value)
 
    value :: Parser String
-   value = quotedstring <|> many1 (satisfy $ not . (==';')) <|> return ""
+   value = quotedstring <|> many1 (satisfy (/= ';')) <|> return ""
 
 quotedstring :: Parser String
-quotedstring = char '"' *> many (satisfy $ not . (=='"')) <* char '"'
+quotedstring = char '"' *> many (satisfy  (/= '"')) <* char '"'
 
 word :: Parser String
 word = many1 (satisfy (\x -> isAlphaNum x || x=='_' || x=='.' || x=='-' || x==':'))
+
