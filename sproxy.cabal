@@ -36,6 +36,7 @@ executable sproxy
     , bytestring
     , containers >= 0.5
     , data-default
+    , docopt >= 0.7
     , entropy
     , http-conduit >= 2.1.8
     , http-kit >= 0.5
@@ -44,8 +45,8 @@ executable sproxy
     , logging-facade
     , logsink
     , network
-    , optparse-applicative
     , postgresql-simple
+    , raw-strings-qq >= 1.1
     , resource-pool
     , split
     , string-conversions
