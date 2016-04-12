@@ -152,38 +152,3 @@ Create a project in the [Google Developers Console](https://console.developers.g
 Put the `Client ID` in `config/sproxy.yml` and the `Client secret` in a file
 called `config/client_secret`.
 
-Make sure that you set an *Email address* and a  *Product name* under *APIs & auth* -> *Consent screen*!
-
-### Create a database
-
-In `example/privileges.sql` replace `me@zalora.com` with your actual email
-address.
-
-```
-$ createdb sproxy && psql sproxy < sproxy.sql && psql sproxy < example/privileges.sql
-```
-
-Make sure that the `database` setting in `config/sproxy.yml` is suitable for
-your database setup.
-
-### Build and run
-
-Build and run `sproxy`:
-
-```
-$ cabal build && sudo ./dist/build/sproxy/sproxy
-```
-
-Run example backend application:
-
-```
-$ runhaskell example/app.hs
-```
-
-Make a request to <https://dev.zalora.com/>.
-
-### Troubleshooting
-
-If you already have a cookie for `.zalora.com` sproxy gets confused and you
-will repeatedly be redirected to Google's sign-in page.  Delete that cookie to
-resolve this.
