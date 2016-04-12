@@ -88,10 +88,7 @@ run cf authorize = do
                  `finally` putMVar mvar ()
 
   -- Listen on port 80 just to redirect everything to HTTPS.
-  let listen80 =
-        case cfRedirectHttpToHttps cf of
-          Just True -> True
-          _         -> 443 == cfListen cf
+  let listen80 = fromMaybe (443 == cfListen cf) (cfRedirectHttpToHttps cf)
 
   when listen80 $
     void . forkIO $ listen (PortNumber 80) redirectToHttps `catch` logException
