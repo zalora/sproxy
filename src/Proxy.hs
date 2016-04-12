@@ -16,7 +16,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)
 import Data.List (intercalate)
 import Data.Maybe
-import Data.Map as Map (fromList, toList, insert, delete)
+import Data.Map as Map (fromListWith, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
 import Network (PortID(..), listenOn, sClose, connectTo)
@@ -189,8 +189,8 @@ forwardRequest config send authorize cookies addr request@(Request method path h
                     insert "X-Forwarded-Proto" "https" $
                     addForwardedForHeader ip $
                     insert "Connection" "close" $
-                    setCookies $
-                    fromList headers
+                    setCookies $ fromListWith (\a b -> B8.concat [a, ",", b]) headers
+            Log.debug $ show downStreamHeaders
             bracket (connectTo host portID) hClose $ \h -> do
               sendRequest (B8.hPutStr h) request{requestHeaders = downStreamHeaders}
               conn <- inputStreamFromHandle h
