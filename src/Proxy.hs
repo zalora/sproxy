@@ -10,7 +10,6 @@ import Control.Exception
 import System.IO.Error
 import GHC.IO.Exception
 import Data.Monoid
-import Data.Typeable (typeOf)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 import Data.Default (def)
@@ -214,19 +213,37 @@ listen port action =
   sClose $
   \serverSock -> forever $ do
   (sock, addr) <- accept serverSock
-  forkIO $ (action addr sock `finally` close sock) `catch` exceptionHandler
+  forkIO $ (action addr sock `finally` close sock) `catches` handlers
   where
-    exceptionHandler e
-      | e `isException` UnexpectedEndOfInput || e `isException` TLS.HandshakeFailed TLS.Error_EOF || isResourceVanished e =
-          Log.debug ("client closed connection (" ++ show e ++ ")")
-      | otherwise = logException e
+    handlers = [ Handler ioH
+               , Handler toolkitH
+               , Handler tlsH
+               , Handler logException ]
+
+    ioH :: IOException -> IO ()
+    ioH e
+      | ResourceVanished == ioeGetErrorType e = clientClosedConection e
+      | otherwise = logException' e
+
+    toolkitH :: ToolkitError -> IO ()
+    toolkitH e@UnexpectedEndOfInput = clientClosedConection e
+    toolkitH e = logException' e
+
+    tlsH :: TLS.TLSException -> IO ()
+    tlsH e@(TLS.HandshakeFailed TLS.Error_EOF) = clientClosedConection e
+    tlsH e@(TLS.HandshakeFailed (TLS.Error_Protocol (_, _, _))) = clientError e
+    tlsH e@(TLS.HandshakeFailed (TLS.Error_Packet_Parsing _)) = clientError e
+    tlsH e = logException' e
+
+    logException' :: Exception e => e -> IO ()
+    logException' = logException . toException
+
+    clientClosedConection :: Exception e => e -> IO ()
+    clientClosedConection e = Log.debug ("client closed connection (" ++ displayException e ++ ")")
+
+    clientError :: Exception e => e -> IO ()
+    clientError e = Log.debug ("client error (" ++ displayException e ++ ")")
 
 logException :: SomeException -> IO ()
-logException (SomeException e) = Log.error (show (typeOf e) ++ " (" ++ show e ++ ")")
-
-isException :: (Eq a, Exception a) => SomeException -> a -> Bool
-isException e v = fromMaybe False $ (== v) <$> fromException e
-
-isResourceVanished :: SomeException -> Bool
-isResourceVanished = maybe False ((== ResourceVanished) . ioeGetErrorType) . fromException
+logException = Log.error . displayException
 
