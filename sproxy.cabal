@@ -29,7 +29,7 @@ executable sproxy
   default-language: Haskell2010
   ghc-options: -Wall -static
   build-depends:
-      base >= 4.8
+      base >= 4.8 && < 5
     , SHA
     , aeson >= 0.7.0.4
     , attoparsec
