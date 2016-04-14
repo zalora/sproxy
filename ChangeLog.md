@@ -1,3 +1,12 @@
+0.9.4
+=====
+
+* Combine the multiple header fields into one "field-name: field-value" pair
+  with a comma-separated list for the field-value (Instead of removing duplicates).
+* `sproxy [ -h | --help ]` works (using [docopt](https://hackage.haskell.org/package/docopt))
+* Stop counting client parsing failures as errors.
+
+
 0.9.3
 =====
 
