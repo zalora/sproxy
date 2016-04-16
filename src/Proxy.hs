@@ -75,8 +75,8 @@ run cf authorize = do
         }
 
   case configBackendPortID config of
-    UnixSocket path -> hPutStrLn stderr $ "Forwarding to UNIX socket " ++ path
-    PortNumber p -> hPutStrLn stderr $ "Forwarding to "
+    UnixSocket path -> Log.info $ "Backend on UNIX socket " ++ path
+    PortNumber p -> Log.info $ "Backend on "
                        ++ configBackendAddress config ++ ":"
                        ++ show p
     _ -> return () -- XXX can't happen
