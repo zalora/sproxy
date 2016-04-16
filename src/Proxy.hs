@@ -3,45 +3,48 @@ module Proxy (
   run
 ) where
 
-import Control.Monad hiding (forM_)
-import Data.Foldable (forM_)
 import Control.Concurrent
 import Control.Exception
-import System.IO.Error
-import GHC.IO.Exception
+import Control.Monad hiding (forM_)
+import Data.Default (def)
+import Data.Foldable (forM_)
+import Data.List (intercalate)
+import Data.Map as Map (fromListWith, toList, insert, delete)
+import Data.Maybe
 import Data.Monoid
+import Data.String.Conversions (cs)
+import GHC.IO.Exception
+import Network (PortID(..), connectTo)
+import Network.HTTP.Toolkit
+import Network.HTTP.Types
+import Network.Socket (accept, close, socket, listen, bind,
+  maxListenQueue, getSocketName, Socket, SockAddr(SockAddrInet),
+  Family(AF_INET), SocketType(Stream), setSocketOption,
+  SocketOption(ReuseAddr))
+import System.Entropy (getEntropy)
+import System.IO
+import System.IO.Error
+import System.Posix.Directory (changeWorkingDirectory)
+import System.Posix.User (getRealUserID, setGroupID, setUserID,
+  getUserEntryForName, UserEntry(..), GroupEntry(..), setGroups,
+  getAllGroupEntries)
+import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
-import Data.Default (def)
-import Data.List (intercalate)
-import Data.Maybe
-import Data.Map as Map (fromListWith, toList, insert, delete)
-import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
-import Network (PortID(..), connectTo)
-import Network.Socket (accept, close, socket, listen, bind, maxListenQueue,
-                       getSocketName, Socket, SockAddr(SockAddrInet),
-                       Family(AF_INET), SocketType(Stream),
-                       setSocketOption, SocketOption(ReuseAddr))
 import qualified Network.Socket.ByteString as Socket
-import Network.HTTP.Types
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
-import System.IO
-import System.Entropy (getEntropy)
-import qualified Data.ByteString.Base64 as Base64
-import Network.HTTP.Toolkit
-
 import qualified System.Logging.Facade as Log
 
-import Type
-import Util
-import Logging
 import Authenticate
-import Cookies
 import Authorize
 import ConfigFile
+import Cookies
 import HTTP
+import Logging
+import Type
+import Util
 
 data Config = Config {
   configTLSCredential :: TLS.Credential
@@ -54,6 +57,33 @@ data Config = Config {
 run :: ConfigFile -> AuthorizeAction -> IO ()
 run cf authorize = do
   Logging.setup (cfLogLevel cf) (cfLogTarget cf)
+
+  sock <- socket AF_INET Stream 0
+  setSocketOption sock ReuseAddr 1
+  bind sock $ SockAddrInet (fromIntegral $ cfListen cf) 0
+
+  sock80 <- if fromMaybe (443 == cfListen cf) (cfRedirectHttpToHttps cf)
+    then do
+      s <- socket AF_INET Stream 0
+      setSocketOption s ReuseAddr 1
+      bind s $ SockAddrInet 80 0
+      return (Just s)
+    else
+      return Nothing
+
+  uid <- getRealUserID
+  when (0 == uid) $ do
+    let user = cfUser cf
+    u <- getUserEntryForName user
+    groupIDs <- map groupID . filter (\g -> user `elem` groupMembers g)
+             <$> getAllGroupEntries
+    Log.info $ "Switching to user " ++ show user
+    setGroups groupIDs
+    setGroupID $ userGroupID u
+    setUserID $ userID u
+    changeWorkingDirectory (homeDirectory u)
+      `catch` (\e -> logException e >> changeWorkingDirectory "/")
+
   clientSecret <- strip <$> readFile (cfClientSecretFile cf)
   authTokenKey <- B8.unpack . Base64.encode <$> getEntropy 32
   credential <- either error reverseCerts <$> TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
@@ -83,29 +113,19 @@ run cf authorize = do
 
   mvar <- newEmptyMVar
 
-  sock <- socket AF_INET Stream 0
-  setSocketOption sock ReuseAddr 1
-  bind sock $ SockAddrInet (fromIntegral $ cfListen cf) 0
-  void . forkIO $ (runProxy sock config authConfig authorize `catch` logException)
+  void . forkIO $ (runOnSocket sock (serve config authConfig authorize) `catch` logException)
                  `finally` (close sock >> putMVar mvar ())
 
-  let listen80 = fromMaybe (443 == cfListen cf) (cfRedirectHttpToHttps cf)
-  when listen80 $ do
-    sock80 <- socket AF_INET Stream 0
-    setSocketOption sock80 ReuseAddr 1
-    bind sock80 $ SockAddrInet 80 0
-    void . forkIO $ (runOnSocket sock80 redirectToHttps `catch` logException)
-                    `finally` close sock80
+  case sock80 of
+    Nothing -> return ()
+    Just s -> void . forkIO $ (runOnSocket s redirectToHttps `catch` logException)
+                             `finally` close s
 
   takeMVar mvar
   where
     -- Usually combined certs are in server, intermediate order,
     -- but the tls library expects them in the opposite order.
     reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
-
-runProxy :: Socket -> Config -> AuthConfig -> AuthorizeAction -> IO ()
-runProxy serverSock config authConfig authorize =
-  runOnSocket serverSock (serve config authConfig authorize)
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
