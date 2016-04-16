@@ -18,8 +18,11 @@ import Data.Maybe
 import Data.Map as Map (fromListWith, toList, insert, delete)
 import Data.String.Conversions (cs)
 import qualified Data.X509 as X509
-import Network (PortID(..), listenOn, sClose, connectTo)
-import Network.Socket (Socket, SockAddr, accept, close)
+import Network (PortID(..), connectTo)
+import Network.Socket (accept, close, socket, listen, bind, maxListenQueue,
+                       getSocketName, Socket, SockAddr(SockAddrInet),
+                       Family(AF_INET), SocketType(Stream),
+                       setSocketOption, SocketOption(ReuseAddr))
 import qualified Network.Socket.ByteString as Socket
 import Network.HTTP.Types
 import qualified Network.TLS as TLS
@@ -80,17 +83,19 @@ run cf authorize = do
 
   mvar <- newEmptyMVar
 
-  -- Immediately fork a new thread for accepting connections since
-  -- the main thread is special and expensive to communicate with.
-  void . forkIO $ (runProxy (PortNumber . fromIntegral $ cfListen cf)
-                            config authConfig authorize `catch` logException)
-                 `finally` putMVar mvar ()
+  sock <- socket AF_INET Stream 0
+  setSocketOption sock ReuseAddr 1
+  bind sock $ SockAddrInet (fromIntegral $ cfListen cf) 0
+  void . forkIO $ (runProxy sock config authConfig authorize `catch` logException)
+                 `finally` (close sock >> putMVar mvar ())
 
-  -- Listen on port 80 just to redirect everything to HTTPS.
   let listen80 = fromMaybe (443 == cfListen cf) (cfRedirectHttpToHttps cf)
-
-  when listen80 $
-    void . forkIO $ listen (PortNumber 80) redirectToHttps `catch` logException
+  when listen80 $ do
+    sock80 <- socket AF_INET Stream 0
+    setSocketOption sock80 ReuseAddr 1
+    bind sock80 $ SockAddrInet 80 0
+    void . forkIO $ (runOnSocket sock80 redirectToHttps `catch` logException)
+                    `finally` close sock80
 
   takeMVar mvar
   where
@@ -98,8 +103,9 @@ run cf authorize = do
     -- but the tls library expects them in the opposite order.
     reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
 
-runProxy :: PortID -> Config -> AuthConfig -> AuthorizeAction -> IO ()
-runProxy port config authConfig authorize = listen port (serve config authConfig authorize)
+runProxy :: Socket -> Config -> AuthConfig -> AuthorizeAction -> IO ()
+runProxy serverSock config authConfig authorize =
+  runOnSocket serverSock (serve config authConfig authorize)
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
@@ -203,46 +209,43 @@ forwardRequest config send authorize cookies addr request@(Request method path h
       [] -> delete hCookie
       _  -> insert hCookie (formatCookies cookies)
 
-listen :: PortID -> (SockAddr -> Socket -> IO ()) -> IO ()
-listen port action =
-  bracket
-  ( do
-    sock <- listenOn port
-    hPutStrLn stderr $ "Listening on " ++ show port
-    return sock )
-  sClose $
-  \serverSock -> forever $ do
-  (sock, addr) <- accept serverSock
-  forkIO $ (action addr sock `finally` close sock) `catches` handlers
-  where
-    handlers = [ Handler ioH
-               , Handler toolkitH
-               , Handler tlsH
-               , Handler logException ]
+runOnSocket :: Socket -> (SockAddr -> Socket -> IO ()) -> IO ()
+runOnSocket serverSock action = do
+  listen serverSock maxListenQueue
+  name <- getSocketName serverSock
+  Log.info $ "Listening on " ++ show name
+  forever $ do
+    (sock, addr) <- accept serverSock
+    forkIO $ (action addr sock `finally` close sock) `catches` handlers
+    where
+      handlers = [ Handler ioH
+                 , Handler toolkitH
+                 , Handler tlsH
+                 , Handler logException ]
 
-    ioH :: IOException -> IO ()
-    ioH e
-      | ResourceVanished == ioeGetErrorType e = clientClosedConection e
-      | otherwise = logException' e
+      ioH :: IOException -> IO ()
+      ioH e
+        | ResourceVanished == ioeGetErrorType e = clientClosedConection e
+        | otherwise = logException' e
 
-    toolkitH :: ToolkitError -> IO ()
-    toolkitH e@UnexpectedEndOfInput = clientClosedConection e
-    toolkitH e = logException' e
+      toolkitH :: ToolkitError -> IO ()
+      toolkitH e@UnexpectedEndOfInput = clientClosedConection e
+      toolkitH e = logException' e
 
-    tlsH :: TLS.TLSException -> IO ()
-    tlsH e@(TLS.HandshakeFailed TLS.Error_EOF) = clientClosedConection e
-    tlsH e@(TLS.HandshakeFailed (TLS.Error_Protocol (_, _, _))) = clientError e
-    tlsH e@(TLS.HandshakeFailed (TLS.Error_Packet_Parsing _)) = clientError e
-    tlsH e = logException' e
+      tlsH :: TLS.TLSException -> IO ()
+      tlsH e@(TLS.HandshakeFailed TLS.Error_EOF) = clientClosedConection e
+      tlsH e@(TLS.HandshakeFailed (TLS.Error_Protocol (_, _, _))) = clientError e
+      tlsH e@(TLS.HandshakeFailed (TLS.Error_Packet_Parsing _)) = clientError e
+      tlsH e = logException' e
 
-    logException' :: Exception e => e -> IO ()
-    logException' = logException . toException
+      logException' :: Exception e => e -> IO ()
+      logException' = logException . toException
 
-    clientClosedConection :: Exception e => e -> IO ()
-    clientClosedConection e = Log.debug ("client closed connection (" ++ displayException e ++ ")")
+      clientClosedConection :: Exception e => e -> IO ()
+      clientClosedConection e = Log.debug ("client closed connection (" ++ displayException e ++ ")")
 
-    clientError :: Exception e => e -> IO ()
-    clientError e = Log.debug ("client error (" ++ displayException e ++ ")")
+      clientError :: Exception e => e -> IO ()
+      clientError e = Log.debug ("client error (" ++ displayException e ++ ")")
 
 logException :: SomeException -> IO ()
 logException = Log.error . displayException
