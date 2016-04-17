@@ -1,4 +1,6 @@
-log_level: debug
+# Log level: trace, debug, info, warn, error
+# Default is debug
+# log_level: debug
 
 # syslog / stderr
 # Default is stderr.

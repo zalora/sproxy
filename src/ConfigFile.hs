@@ -43,7 +43,7 @@ data ConfigFile = ConfigFile {
 
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
-        (m .: "log_level" >>= parseLogLevel)
+        (m .:? "log_level" .!= "debug" >>= parseLogLevel)
     <*> (m .:? "log_target" .!= "stderr" >>= parseLogTarget)
     <*> m .:? "listen" .!= 443
     <*> m .:? "redirect_http_to_https"
