@@ -1,3 +1,10 @@
+0.9.5
+=====
+
+* Allow running as unprivileged user: added option `user` in the configuration file.
+* Default log level is `debug` if omitted in the configuration file.
+
+
 0.9.4
 =====
 
