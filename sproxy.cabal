@@ -12,6 +12,10 @@ extra-source-files: README.md ChangeLog.md
 cabal-version: >=1.10
 data-files: sproxy.sql
 
+source-repository head
+  type: git
+  location: https://github.com/zalora/sproxy.git
+
 executable sproxy
   main-is: Main.hs
   other-modules:
