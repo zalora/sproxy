@@ -5,6 +5,7 @@ license: MIT
 license-file: LICENSE
 copyright: 2013-2016, Zalora South East Asia Pte. Ltd
 author: Chris Forno <jekor@jekor.com>
+      , Igor Pashev <pashev.igor@gmail.com>
 maintainer: Igor Pashev <pashev.igor@gmail.com>
 category: Web
 build-type: Simple
