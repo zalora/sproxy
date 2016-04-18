@@ -9,7 +9,7 @@ author: Chris Forno <jekor@jekor.com>
 maintainer: Igor Pashev <pashev.igor@gmail.com>
 category: Web
 build-type: Simple
-extra-source-files: README.md ChangeLog.md
+extra-source-files: README.md ChangeLog.md config/sproxy.yml.example
 cabal-version: >=1.10
 data-files: sproxy.sql
 
