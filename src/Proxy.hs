@@ -256,6 +256,7 @@ runOnSocket serverSock action = do
       tlsH e@(TLS.HandshakeFailed TLS.Error_EOF) = clientClosedConection e
       tlsH e@(TLS.HandshakeFailed (TLS.Error_Protocol (_, _, _))) = clientError e
       tlsH e@(TLS.HandshakeFailed (TLS.Error_Packet_Parsing _)) = clientError e
+      tlsH e@(TLS.HandshakeFailed (TLS.Error_Misc _)) = clientError e
       tlsH e = logException' e
 
       logException' :: Exception e => e -> IO ()
