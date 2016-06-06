@@ -1,3 +1,13 @@
+0.9.6
+=====
+
+* Session shelf life is configurable with the `session_shelf_life` option
+  in configuration file. Defaults to 30 days. It was hard-coded before.
+* Dropped dependency on `logsink` / `logging-facade` (fail to build).
+  Log to stderr only, log levels: error, warning, info, debug.
+  The `log_target` option is ignored.
+
+
 0.9.5
 =====
 
@@ -32,10 +42,8 @@
 =====
 
 * Deny SSLv3.
-
 * Removed the `auth_token_key` option from the config file.
   The token is generated randomly on startup.
 	Restarting sproxy invalidates existing sessions.
-
 * Added `ChangeLog.md`
 

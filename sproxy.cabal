@@ -1,5 +1,5 @@
 name: sproxy
-version: 0.9.5
+version: 0.9.6
 synopsis: HTTP proxy for authenticating users via Google OAuth2
 license: MIT
 license-file: LICENSE
