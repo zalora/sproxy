@@ -43,6 +43,7 @@ data AuthConfig = AuthConfig {
 , authConfigClientID :: String
 , authConfigClientSecret :: String
 , authConfigAuthTokenKey :: String
+, authConfigShelfLife :: EpochTime
 } deriving (Eq, Show)
 
 data AccessToken = AccessToken {
@@ -124,15 +125,14 @@ authenticate config baseUri path code = do
               case decode body of
                 Nothing -> authenticationFailed "Received an invalid user info response from Google's authentication server."
                 Just userInfo -> do
-                  clientToken <- authToken authTokenKey (userEmail userInfo) (userGivenName userInfo, userFamilyName userInfo)
-                  let cookie = setCookie cookieDomain cookieName (show clientToken) authShelfLife
+                  clientToken <- authToken config userInfo
+                  let cookie = setCookie cookieDomain cookieName (show clientToken) (authConfigShelfLife config)
                   mkResponse found302 [("Location", baseUri <> urlDecode False path), ("Set-Cookie", UTF8.fromString cookie)] ""
   where
     cookieDomain = authConfigCookieDomain config
     cookieName = authConfigCookieName config
     clientID = authConfigClientID config
     clientSecret = authConfigClientSecret config
-    authTokenKey = authConfigAuthTokenKey config
 
 logout :: AuthConfig -> ByteString -> IO (Response BodyReader)
 logout config url = do
@@ -168,11 +168,14 @@ validAuth config token =
 
 -- | Create an AuthToken with the default expiration time, automatically
 -- calculating the digest.
-authToken :: String -> String -> (String, String) -> IO AuthToken
-authToken key email name = do
+authToken :: AuthConfig -> UserInfo -> IO AuthToken
+authToken acfg user = do
   now <- epochTime
-  let expires = now + authShelfLife
-      digest = tokenDigest key AuthToken {
+  let
+      email = userEmail user
+      name = (userGivenName user, userFamilyName user)
+      expires = now + authConfigShelfLife acfg
+      digest = tokenDigest (authConfigAuthTokenKey acfg) AuthToken {
           authEmail = email
         , authName = name
         , authExpiry = expires
@@ -194,5 +197,3 @@ tokenDigest :: String -> AuthToken -> String
 tokenDigest key a = showDigest $ hmacSha1 (BL8.pack key) (BL8.pack token)
   where token = show (authEmail a) ++ show (authExpiry a)
 
-authShelfLife :: EpochTime
-authShelfLife = 30 * 24 * 60 * 60 -- 30 days

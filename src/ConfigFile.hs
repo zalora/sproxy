@@ -3,11 +3,11 @@
 module ConfigFile where
 
 import           Control.Applicative
-import           Data.Word
-import           System.IO
-import           System.Exit
 import           Data.Aeson
+import           Data.Word
 import           Data.Yaml
+import           System.Exit
+import           System.IO
 
 import Logging (LogLevel(Debug))
 
@@ -35,6 +35,7 @@ data ConfigFile = ConfigFile {
 , cfBackendPort :: Word16
 , cfBackendSocket :: Maybe String
 , cfUser :: String
+, cfSessionShelfLife :: Word32
 } deriving (Eq, Show)
 
 instance FromJSON ConfigFile where
@@ -53,5 +54,6 @@ instance FromJSON ConfigFile where
     <*> m .:? "backend_port" .!= 8080
     <*> m .:? "backend_socket"
     <*> m .:? "user" .!= "sproxy"
+    <*> m .:? "session_shelf_life" .!= (30 * 24 * 60 * 60)
   parseJSON _ = empty
 

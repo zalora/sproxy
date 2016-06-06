@@ -51,3 +51,7 @@ database: "user=you dbname=sproxy"
 # If specified, connect to this UNIX-socket instead of TCP
 # backend_socket: "/tmp/foo.sock"
 
+# Sproxy session shelf life in seconds, default is 30 days.
+# When expired, Sproxy will require re-authenticate.
+# session_shelf_life: 2592000
+

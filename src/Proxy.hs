@@ -28,6 +28,7 @@ import System.Posix.Directory (changeWorkingDirectory)
 import System.Posix.User (getRealUserID, setGroupID, setUserID,
   getUserEntryForName, UserEntry(..), GroupEntry(..), setGroups,
   getAllGroupEntries)
+import Foreign.C.Types (CTime(..))
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
@@ -93,6 +94,7 @@ run cf authorize = do
         , authConfigClientID = cfClientID cf
         , authConfigClientSecret = clientSecret
         , authConfigAuthTokenKey = authTokenKey
+        , authConfigShelfLife = CTime . fromIntegral $ cfSessionShelfLife cf
         }
       config = Config {
           configTLSCredential = credential
