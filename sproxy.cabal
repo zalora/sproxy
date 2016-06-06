@@ -48,14 +48,13 @@ executable sproxy
     , http-kit >= 0.5
     , http-types >= 0.8.5
     , interpolatedstring-perl6
-    , logging-facade
-    , logsink
     , network
     , postgresql-simple
     , raw-strings-qq >= 1.1
     , resource-pool
     , split
     , string-conversions
+    , text
     , time
     , tls >= 1.3.3
     , unix

@@ -1,18 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module ConfigFile where
 
 import           Control.Applicative
-import           Data.Char
 import           Data.Word
-import           Text.Read
 import           System.IO
 import           System.Exit
 import           Data.Aeson
 import           Data.Yaml
-import           System.Logging.LogSink.Config
+
+import Logging (LogLevel(Debug))
 
 withConfigFile :: FilePath -> (ConfigFile -> IO a) -> IO a
 withConfigFile configFile action = do
@@ -24,9 +21,8 @@ withConfigFile configFile action = do
     Right config -> action config
 
 data ConfigFile = ConfigFile {
-  cfLogLevel :: LogLevel
-, cfLogTarget :: LogTarget
-, cfListen :: Word16
+  cfListen :: Word16
+, cfLogLevel :: LogLevel
 , cfRedirectHttpToHttps :: Maybe Bool
 , cfCookieDomain :: String
 , cfCookieName :: String
@@ -43,9 +39,8 @@ data ConfigFile = ConfigFile {
 
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
-        (m .:? "log_level" .!= "debug" >>= parseLogLevel)
-    <*> (m .:? "log_target" .!= "stderr" >>= parseLogTarget)
-    <*> m .:? "listen" .!= 443
+        m .:? "listen" .!= 443
+    <*> m .:? "log_level" .!= Debug
     <*> m .:? "redirect_http_to_https"
     <*> m .: "cookie_domain"
     <*> m .: "cookie_name"
@@ -59,17 +54,4 @@ instance FromJSON ConfigFile where
     <*> m .:? "backend_socket"
     <*> m .:? "user" .!= "sproxy"
   parseJSON _ = empty
-
-deriving instance Read LogLevel
-
-parseLogLevel :: String -> Parser LogLevel
-parseLogLevel s = (maybe err return . readMaybe . map toUpper) s
-  where
-    err = fail ("invalid log_level " ++ show s)
-
-parseLogTarget :: String -> Parser LogTarget
-parseLogTarget s = case s of
-  "stderr" -> return StdErr
-  "syslog" -> return SysLog
-  _ -> fail ("invalid log_target " ++ show s)
 

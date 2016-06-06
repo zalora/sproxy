@@ -35,16 +35,15 @@ import qualified Data.X509 as X509
 import qualified Network.Socket.ByteString as Socket
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
-import qualified System.Logging.Facade as Log
 
 import Authenticate
 import Authorize
 import ConfigFile
 import Cookies
 import HTTP
-import Logging
 import Type
 import Util
+import qualified Logging as Log
 
 data Config = Config {
   configTLSCredential :: TLS.Credential
@@ -56,7 +55,7 @@ data Config = Config {
 -- the server
 run :: ConfigFile -> AuthorizeAction -> IO ()
 run cf authorize = do
-  Logging.setup (cfLogLevel cf) (cfLogTarget cf)
+  Log.start (cfLogLevel cf)
 
   sock <- socket AF_INET Stream 0
   setSocketOption sock ReuseAddr 1

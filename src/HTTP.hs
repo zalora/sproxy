@@ -16,7 +16,7 @@ import           Network.HTTP.Toolkit
 import           Network.HTTP.Toolkit.Body
 import           Text.InterpolatedString.Perl6 (qc)
 
-import qualified System.Logging.Facade as Log
+import qualified Logging as Log
 
 hostHeaderMissing :: Request a -> IO (Response BodyReader)
 hostHeaderMissing r = do

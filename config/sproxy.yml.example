@@ -1,10 +1,6 @@
-# Log level: trace, debug, info, warn, error
+# Log level: debug, info, warn, error
 # Default is debug
 # log_level: debug
-
-# syslog / stderr
-# Default is stderr.
-# log_target: stderr
 
 # The port sproxy listens on (this is always HTTPS).
 # Default is 443
