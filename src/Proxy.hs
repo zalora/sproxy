@@ -138,7 +138,7 @@ redirectToHttps _ sock = do
     Just uri -> do
       let location = uri <> requestPath request
       Log.debug ("Redirecting HTTP request to " ++ show location)
-      simpleResponse send seeOther303 [("Location", location)] ""
+      simpleResponse send movedPermanently301 [("Location", location)] ""
     Nothing -> hostHeaderMissing request >>= sendResponse send
   where
     send = Socket.sendAll sock
