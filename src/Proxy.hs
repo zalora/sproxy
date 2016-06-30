@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Proxy (
   run
 ) where
@@ -37,13 +39,17 @@ import qualified Network.Socket.ByteString as Socket
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 
-import Authenticate
+import Authenticate (loginPage, logout, redirectToLoginPage, validAuth)
+import Authenticate.Token (AuthToken(..), AuthUser(..))
+import Authenticate.Types (AuthConfig(..), OAuthClient(..))
 import Authorize
 import ConfigFile
 import Cookies
 import HTTP
 import Type
 import Util
+import qualified Authenticate.Google as Google
+import qualified Authenticate.LinkedIn as LinkedIn
 import qualified Logging as Log
 
 data Config = Config {
@@ -84,17 +90,19 @@ run cf authorize = do
     changeWorkingDirectory (homeDirectory u)
       `catch` (\e -> logException e >> changeWorkingDirectory "/")
 
-  clientSecret <- strip <$> readFile (cfClientSecretFile cf)
   authTokenKey <- B8.unpack . Base64.encode <$> getEntropy 32
   credential <- either error reverseCerts <$> TLS.credentialLoadX509 (cfSslCerts cf) (cfSslKey cf)
+
+  googleCLient <- mkOAuthClient (cfGoogleClientID cf) (cfGoogleClientSecretFile cf)
+  linkedInCLient <- mkOAuthClient (cfLinkedInClientID cf) (cfLinkedInClientSecretFile cf)
 
   let authConfig = AuthConfig {
           authConfigCookieDomain = cfCookieDomain cf
         , authConfigCookieName = cfCookieName cf
-        , authConfigClientID = cfClientID cf
-        , authConfigClientSecret = clientSecret
         , authConfigAuthTokenKey = authTokenKey
         , authConfigShelfLife = CTime . fromIntegral $ cfSessionShelfLife cf
+        , authConfigGoogleClient = googleCLient
+        , authConfigLinkedInClient = linkedInCLient
         }
       config = Config {
           configTLSCredential = credential
@@ -112,6 +120,7 @@ run cf authorize = do
                        ++ show p
     _ -> return () -- XXX can't happen
 
+
   mvar <- newEmptyMVar
 
   void . forkIO $ (runOnSocket sock (serve config authConfig authorize) `catch` logException)
@@ -127,6 +136,15 @@ run cf authorize = do
     -- Usually combined certs are in server, intermediate order,
     -- but the tls library expects them in the opposite order.
     reverseCerts (X509.CertificateChain certs, key) = (X509.CertificateChain $ reverse certs, key)
+
+    mkOAuthClient :: Maybe String -> Maybe FilePath -> IO (Maybe OAuthClient)
+    mkOAuthClient _ Nothing = return Nothing
+    mkOAuthClient Nothing _ = return Nothing
+    mkOAuthClient (Just cid) (Just f) = do
+      sec <- strip <$> readFile f
+      return . Just $ OAuthClient { oauthClientId = B8.pack cid
+                                  , oauthClientSecret = B8.pack sec}
+
 
 -- | Redirects requests to https.
 redirectToHttps :: SockAddr -> Socket -> IO ()
@@ -173,45 +191,55 @@ serve config authConfig authorize addr sock = do
           request@(Request _ path headers _) <- readRequest True conn
           mResponse <- case baseUri (requestHeaders request) of
             Nothing -> Just <$> hostHeaderMissing request
-            Just uri -> do
+            Just base -> do
               let (segments, query) = (decodePath . extractPath) path
               let redirectPath = fromMaybe "/" $ join $ lookup "state" query
               case segments of
                 ["sproxy", "oauth2callback"] ->
                   case join $ lookup "code" query of
                     Nothing -> Just <$> badRequest
-                    Just code -> Just <$> authenticate authConfig uri redirectPath code
-                ["sproxy", "logout"] ->
-                  Just <$> logout authConfig (uri <> redirectPath)
-                -- sproxy sites are private by design. It doesn't make sense to index the authentication page.
+                    Just code -> Just <$> Google.authenticate authConfig base redirectPath code
+                ["sproxy", "oauth2callback", "linkedin"] ->
+                  case join $ lookup "code" query of
+                    Nothing -> Just <$> badRequest
+                    Just code -> Just <$> LinkedIn.authenticate authConfig base redirectPath code
+                ["sproxy", "login"] -> Just <$> loginPage authConfig base redirectPath
+                ["sproxy", "logout"] -> Just <$> logout authConfig (base <> redirectPath)
                 ["robots.txt"] -> Just <$> mkTextResponse ok200 "User-agent: *\nDisallow: /"
                 _ -> -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                    Nothing -> Just <$> redirectForAuth authConfig path uri
+                    Nothing -> Just <$> redirectToLoginPage base path
                     Just (authCookie, cookies) -> do
                       auth <- validAuth authConfig authCookie
                       case auth of
-                        Nothing -> Just <$> redirectForAuth authConfig path uri
+                        Nothing -> Just <$> redirectToLoginPage base path
                         Just token ->
                           forwardRequest config send authorize cookies addr request token
           forM_ mResponse (sendResponse send)
           return ((not . isConnectionClose) headers)
 
 -- Check our access control list for this user's request and forward it to the backend if allowed.
-forwardRequest :: Config -> SendData -> AuthorizeAction -> [(Name, Cookies.Value)] -> SockAddr -> Request BodyReader -> AuthToken -> IO (Maybe (Response BodyReader))
+forwardRequest :: Config
+               -> SendData
+               -> AuthorizeAction
+               -> [(Name, Cookies.Value)]
+               -> SockAddr
+               -> Request BodyReader
+               -> AuthToken
+               -> IO (Maybe (Response BodyReader))
 forwardRequest config send authorize cookies addr request@(Request method path headers _) token = do
-    groups <- authorize (authEmail token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
+    groups <- authorize (authUserEmail . authUser $ token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
     ip <- formatSockAddr addr
     case groups of
-        [] -> Just <$> accessDenied (authEmail token)
+        [] -> Just <$> accessDenied (authUserEmail . authUser $ token)
         _ -> do
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
                     toList $
-                    insert "From" (cs $ authEmail token) $
+                    insert "From" (cs . authUserEmail . authUser $ token) $
                     insert "X-Groups" (cs $ intercalate "," groups) $
-                    insert "X-Given-Name" (cs $ fst $ authName token) $
-                    insert "X-Family-Name" (cs $ snd $ authName token) $
+                    insert "X-Given-Name" (cs . authUserGivenName . authUser $ token) $
+                    insert "X-Family-Name" (cs . authUserFamilyName . authUser $ token) $
                     insert "X-Forwarded-Proto" "https" $
                     addForwardedForHeader ip $
                     insert "Connection" "close" $

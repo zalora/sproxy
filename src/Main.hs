@@ -17,7 +17,7 @@ import Proxy (run)
 
 usage :: String
 usage =  "SProxy " ++ showVersion version ++
-  " HTTP proxy for authenticating users via Google OAuth2" ++ [r|
+  " HTTP proxy for authenticating users via OAuth2" ++ [r|
 
 Usage:
   sproxy [options]

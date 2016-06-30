@@ -26,8 +26,10 @@ data ConfigFile = ConfigFile {
 , cfRedirectHttpToHttps :: Maybe Bool
 , cfCookieDomain :: String
 , cfCookieName :: String
-, cfClientID :: String
-, cfClientSecretFile :: FilePath
+, cfGoogleClientID :: Maybe String
+, cfGoogleClientSecretFile :: Maybe FilePath
+, cfLinkedInClientID :: Maybe String
+, cfLinkedInClientSecretFile :: Maybe FilePath
 , cfSslKey :: FilePath
 , cfSslCerts :: FilePath
 , cfDatabase :: String
@@ -45,8 +47,10 @@ instance FromJSON ConfigFile where
     <*> m .:? "redirect_http_to_https"
     <*> m .: "cookie_domain"
     <*> m .: "cookie_name"
-    <*> m .: "client_id"
-    <*> m .: "client_secret"
+    <*> m .:? "client_id"
+    <*> m .:? "client_secret"
+    <*> m .:? "linkedin_client_id"
+    <*> m .:? "linkedin_client_secret"
     <*> m .: "ssl_key"
     <*> m .: "ssl_certs"
     <*> m .: "database"

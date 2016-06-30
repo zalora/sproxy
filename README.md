@@ -1,4 +1,4 @@
-# sproxy - secure proxy - HTTP proxy for authenticating users via Google OAuth2
+# Sproxy - HTTP proxy for authenticating users via OAuth2
 
 ## Motivation
 
