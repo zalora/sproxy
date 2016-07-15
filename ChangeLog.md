@@ -1,3 +1,8 @@
+0.9.7.1
+=======
+
+* Fixed cabal source distribution
+
 0.9.7
 =====
 

@@ -1,5 +1,5 @@
 name: sproxy
-version: 0.9.7
+version: 0.9.7.1
 synopsis: HTTP proxy for authenticating users via OAuth2
 license: MIT
 license-file: LICENSE
@@ -24,6 +24,7 @@ executable sproxy
     Authenticate.Google
     Authenticate.LinkedIn
     Authenticate.Token
+    Authenticate.Types
     Authorize
     ConfigFile
     Cookies
