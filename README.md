@@ -9,42 +9,41 @@ Why use a proxy for doing OAuth? Isn't that up to the application?
  * sproxy is independent.  Any web application written in any language can use
    it.
 
+
 ## How it Works
 
-When an HTTP client makes a request, sproxy checks for a *session cookie*.  If it
-doesn't exist (or it's invalid), it redirects the client to a Google
-authentication page.  The user is then prompted to allow the application to
-access information on the user (email address).  If the user proceeds, they're
-redirected back to sproxy with a code from Google.  We then take that code and
-send it to Google ourselves to get back an access token.  Then, we use the
-access token to make another call to Google, this time to their user info API
-to retrieve the user's email address.  Finally, we store the the email address
-in a session cookie: signed with a hash to prevent tampering, set for HTTP only (to
-prevent malicious JavaScript from reading it), and set it for secure (since we
-don't want it traveling over plaintext HTTP connections).
+When an HTTP client makes a request, Sproxy checks for a *session
+cookie*.  If it doesn't exist (or it's invalid, expired), it redirects
+the client to the login page, where the user can choose
+[OAuth2](https://tools.ietf.org/html/rfc6749) provider to authenticate with.
+Finally, we store the the email address in a session cookie: signed with a
+hash to prevent tampering, set for HTTP only (to prevent malicious JavaScript
+from reading it), and set it for secure (since we don't want it traveling
+over plaintext HTTP connections).
 
 From that point on, when sproxy detects a valid session cookie it extracts the
 email, checks it against the access rules, and relays the request to the
 back-end server (if allowed).
 
+
 ## Logout
 
-Hitting the endpoint `/sproxy/logout` will invalidate the session
-cookie.  The user will be redirected to `/` after logout.  The
-query parameter `state` can be provided to specify an alternate redirect path
-(the path has to be percent-encoded, e.g. with `urlEncode` from
-`Network.HTTP.Types.URI`).
+Hitting the endpoint `/sproxy/logout` will invalidate the session cookie.
+The user will be redirected to `/` after logout.  The query parameter `state`
+can be provided to specify an alternate URL-encoded redirect path
+
 
 ## Robots
 
-Since all sproxied resources are private, it doesn't make sense for web crawlers
-to try to index them. In fact, crawlers will index only the Google authentication
+Since all sproxied resources are private, it doesn't make sense for web
+crawlers to try to index them. In fact, crawlers will index only the login
 page. To prevent this, sproxy returns the following for `/robots.txt`:
 
 ```
 User-agent: *
 Disallow: /
 ```
+
 
 ## Permissions system
 
@@ -63,28 +62,29 @@ Here are the main concepts:
   whether a user is allowed to perform a request. This is often a bit
   surprising, please see the following example:
 
+
 ### Privileges example
 
 Consider this `group_privilege` and `privilege_rule` relations:
 
 group            | privilege | domain
 ---------------- | --------- | -----------------
-`readers`        | `basic`   | `wiki.zalora.com`
-`readers`        | `read`    | `wiki.zalora.com`
-`editors`        | `basic`   | `wiki.zalora.com`
-`editors`        | `read`    | `wiki.zalora.com`
-`editors`        | `edit`    | `wiki.zalora.com`
-`administrators` | `basic`   | `wiki.zalora.com`
-`administrators` | `read`    | `wiki.zalora.com`
-`administrators` | `edit`    | `wiki.zalora.com`
-`administrators` | `admin`   | `wiki.zalora.com`
+`readers`        | `basic`   | `wiki.example.com`
+`readers`        | `read`    | `wiki.example.com`
+`editors`        | `basic`   | `wiki.example.com`
+`editors`        | `read`    | `wiki.example.com`
+`editors`        | `edit`    | `wiki.example.com`
+`administrators` | `basic`   | `wiki.example.com`
+`administrators` | `read`    | `wiki.example.com`
+`administrators` | `edit`    | `wiki.example.com`
+`administrators` | `admin`   | `wiki.example.com`
 
 privilege   | domain            | path           | method
 ----------- | ----------------- | -------------- | ------
-`basic`     | `wiki.zalora.com` | `/%`           | `GET`
-`read`      | `wiki.zalora.com` | `/wiki/%`      | `GET`
-`edit`      | `wiki.zalora.com` | `/wiki/edit/%` | `%`
-`admin`     | `wiki.zalora.com` | `/admin/%`     | `%`
+`basic`     | `wiki.example.com` | `/%`           | `GET`
+`read`      | `wiki.example.com` | `/wiki/%`      | `GET`
+`edit`      | `wiki.example.com` | `/wiki/edit/%` | `%`
+`admin`     | `wiki.example.com` | `/admin/%`     | `%`
 
 With this setup, everybody (that is `readers`, `editors` and `administrators`s)
 will have access to e.g. `/imgs/logo.png` and `/favicon.ico`, but only
@@ -118,37 +118,15 @@ all, devops      | devops         | devops
 devops           | all, devops    | devops
 devops           | all            | Access denied
 
+
 ## Configuration File
 
-By default `sproxy` will read its configuration from `config/sproxy.yml`.  You
-can specify a custom path with:
+By default `sproxy` will read its configuration from
+`config/sproxy.yml`.  There is example file with documentation
+[config/sproxy.yml.example](config/sproxy.yml.example). You can specify a
+custom path with:
 
 ```
 sproxy --config /path/to/sproxy.yml
 ```
-
-## Development
-
-```
-$ cp config/sproxy.yml.example config/sproxy.yml
-```
-
-Make sure that you have the following entry in `/etc/hosts`:
-
-```
-127.0.0.1       dev.zalora.com
-```
-
-
-### Create OAuth credentials
-
-Create a project in the [Google Developers Console](https://console.developers.google.com/project).
-
- - visit *APIs & auth* -> *Credentials*
- - select *CREATE NEW CLIENT ID*
- - use `https://dev.zalora.com` as *Authorized JavaScript origins*
- - use `https://dev.zalora.com/sproxy/oauth2callback` as *Authorized redirect URI*
-
-Put the `Client ID` in `config/sproxy.yml` and the `Client secret` in a file
-called `config/client_secret`.
 

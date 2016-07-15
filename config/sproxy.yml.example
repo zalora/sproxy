@@ -4,7 +4,7 @@
 
 # The port sproxy listens on (this is always HTTPS).
 # Default is 443
-# listen: 443
+listen: 4430
 
 # User to run as.
 # If launched with root privileges, sproxy will switch
@@ -17,7 +17,7 @@
 # to the above listen port. Default is "yes" if listen is 443
 # redirect_http_to_https: yes
 
-cookie_domain: dev.zalora.com
+cookie_domain: example.com
 cookie_name: sproxy-dev
 
 

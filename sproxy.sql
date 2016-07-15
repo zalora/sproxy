@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS "group" (
 -- | devops       |
 -- | all          |
 -- | regional     |
--- | SG HQ        |
 
 CREATE EXTENSION IF NOT EXISTS citext;
 
@@ -24,20 +23,11 @@ CREATE TABLE IF NOT EXISTS group_member (
 
 -- | group        | email                  |
 -- |--------------+------------------------|
--- | data science | blah@zalora.com        |
--- | data science | foo@zalora.com         |
--- | devops       | devops1@zalora.com     |
--- | devops       | devops2@zalora.com     |
--- | all          | %@zalora.com           |
--- | all          | %@zalora.sg            |
--- | all          | %@zalora.vn            |
--- | all          | %@zalora.com.hk        |
--- | all          | %@zalora.com.my        |
--- | all          | %@zalora.com.ph        |
--- | all          | %@zalora.co.id         |
--- | all          | %@zalora.co.th         |
--- | regional     | %@zalora.com           |
--- | SG           | %@zalora.sg            |
+-- | data science | blah@example.com        |
+-- | data science | foo@example.com         |
+-- | devops       | devops1@example.com     |
+-- | devops       | devops2@example.com     |
+-- | all          | %@example.com           |
 
 -- Find out which groups a user (email address) belongs to:
 -- SELECT "group" FROM group_member WHERE 'email.address' LIKE email
@@ -48,9 +38,9 @@ CREATE TABLE IF NOT EXISTS domain (
 
 -- | domain                |
 -- |-----------------------|
--- | app1.zalora.com       |
--- | app2.zalora.com       |
--- | app3.zalora.com       |
+-- | app1.example.com       |
+-- | app2.example.com       |
+-- | app3.example.com       |
 
 CREATE TABLE IF NOT EXISTS privilege (
   "domain" TEXT REFERENCES domain (domain) ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
@@ -60,10 +50,10 @@ CREATE TABLE IF NOT EXISTS privilege (
 
 -- | domain                | privilege  |
 -- |-----------------------+------------|
--- | app3.zalora.com       | view       |
--- | app3.zalora.com       | export     |
--- | app1.zalora.com       | list users |
--- | app1.zalora.com       | add users  |
+-- | app3.example.com       | view       |
+-- | app3.example.com       | export     |
+-- | app1.example.com       | list users |
+-- | app1.example.com       | add users  |
 
 CREATE TABLE IF NOT EXISTS privilege_rule (
   "domain" TEXT NOT NULL,
@@ -76,11 +66,11 @@ CREATE TABLE IF NOT EXISTS privilege_rule (
 
 -- | domain                | privilege  | path      | method |
 -- |-----------------------+------------+-----------+--------|
--- | app3.zalora.com       | view       | /%        | %      |
--- | app3.zalora.com       | export     | /export/% | %      |
--- | app1.zalora.com       | list users | /users    | GET    |
--- | app1.zalora.com       | list users | /user/%   | GET    |
--- | app1.zalora.com       | add users  | /users    | POST   |
+-- | app3.example.com       | view       | /%        | %      |
+-- | app3.example.com       | export     | /export/% | %      |
+-- | app1.example.com       | list users | /users    | GET    |
+-- | app1.example.com       | list users | /user/%   | GET    |
+-- | app1.example.com       | add users  | /users    | POST   |
 
 CREATE TABLE IF NOT EXISTS group_privilege (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
@@ -92,10 +82,10 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 
 -- | group        | domain                | privilege  |
 -- |--------------+-----------------------+------------|
--- | data science | app3.zalora.com       | view       |
--- | data science | app3.zalora.com       | export     |
--- | all          | app1.zalora.com       | list users |
--- | devops       | app1.zalora.com       | add users  |
+-- | data science | app3.example.com       | view       |
+-- | data science | app3.example.com       | export     |
+-- | all          | app1.example.com       | list users |
+-- | devops       | app1.example.com       | add users  |
 
 -- Check if the user is authorized for the request. Let's break it
 -- down for understanding:
@@ -106,19 +96,19 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 --
 -- SELECT p.privilege FROM privilege p
 -- INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
--- WHERE 'app3.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
+-- WHERE 'app3.example.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
 -- ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
 --
 -- To get the groups that grant the user access, put that in a subquery:
 --
 -- SELECT gp."group" FROM group_privilege gp
 -- INNER JOIN group_member gm ON gm."group" = gp."group"
--- WHERE 'blah@zalora.com' LIKE email
--- AND 'app3.zalora.com' LIKE "domain"
+-- WHERE 'blah@example.com' LIKE email
+-- AND 'app3.example.com' LIKE "domain"
 -- AND privilege IN (
 --   SELECT p.privilege FROM privilege p
 --   INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
---   WHERE 'app3.zalora.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
+--   WHERE 'app3.example.com' LIKE pr."domain" AND '/export/test' LIKE "path" AND 'GET' ILIKE "method"
 --   ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
 -- )
 --
@@ -128,7 +118,7 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 -- SELECT COUNT(*) > 0 FROM group_privilege gp
 --
 -- Note for the future: If you want to support wildcards that match
--- only a single path component (e.g. app1.zalora.com/user/:/email),
+-- only a single path component (e.g. app1.example.com/user/:/email),
 -- you could try something like:
 --
 -- WHERE 'url' ~ regexp_replace(url, ':', '[^/]+')
@@ -138,11 +128,11 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 
 -- Example data for development:
 /*
-  INSERT INTO domain (domain) VALUES ('dev.zalora.com');
+  INSERT INTO domain (domain) VALUES ('example.com');
   INSERT INTO "group" ("group") VALUES ('dev');
   INSERT INTO group_member ("group", email) VALUES ('dev', '%');
-  INSERT INTO privilege (domain, privilege) VALUES ('dev.zalora.com', 'full');
-  INSERT INTO group_privilege ("group", domain, privilege) VALUES ('dev', 'dev.zalora.com', 'full');
-  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('dev.zalora.com', 'full', '%', '%');
+  INSERT INTO privilege (domain, privilege) VALUES ('example.com', 'full');
+  INSERT INTO group_privilege ("group", domain, privilege) VALUES ('dev', 'example.com', 'full');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', '%');
 */
 
