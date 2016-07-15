@@ -1,3 +1,12 @@
+0.9.7
+=====
+
+* Added support for [LinkedIn OAuth2 API](https://developer.linkedin.com/docs/oauth2).
+  Added new options `linkedin_client_id` and `linkedin_client_secret`. They are optional
+  as well as Google's `client_id` and `client_secret`. The user is now redirected to the
+  `sproxy/login` page to choose an OAuth2 provider.
+
+
 0.9.6
 =====
 
