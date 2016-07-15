@@ -54,7 +54,6 @@ executable sproxy
     , interpolatedstring-perl6
     , network
     , postgresql-simple
-    , raw-strings-qq >= 1.1
     , resource-pool
     , split
     , string-conversions

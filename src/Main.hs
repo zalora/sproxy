@@ -8,7 +8,7 @@ import Data.Maybe (fromJust)
 import Data.Version (showVersion)
 import Paths_sproxy (version) -- from cabal
 import System.Environment (getArgs)
-import Text.RawString.QQ (r)
+import Text.InterpolatedString.Perl6 (qc)
 import qualified System.Console.Docopt.NoTH as O
 
 import Authorize (withDatabaseAuthorizeAction)
@@ -17,7 +17,7 @@ import Proxy (run)
 
 usage :: String
 usage =  "SProxy " ++ showVersion version ++
-  " HTTP proxy for authenticating users via OAuth2" ++ [r|
+  " HTTP proxy for authenticating users via OAuth2" ++ [qc|
 
 Usage:
   sproxy [options]
