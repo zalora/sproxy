@@ -39,7 +39,7 @@ import qualified Network.Socket.ByteString as Socket
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 
-import Authenticate (loginPage, logout, redirectToLoginPage, validAuth)
+import Authenticate (logout, authenticationRequired, validAuth)
 import Authenticate.Token (AuthToken(..), AuthUser(..))
 import Authenticate.Types (AuthConfig(..), OAuthClient(..))
 import Authorize
@@ -203,16 +203,15 @@ serve config authConfig authorize addr sock = do
                   case join $ lookup "code" query of
                     Nothing -> Just <$> badRequest
                     Just code -> Just <$> LinkedIn.authenticate authConfig base redirectPath code
-                ["sproxy", "login"] -> Just <$> loginPage authConfig base redirectPath
                 ["sproxy", "logout"] -> Just <$> logout authConfig (base <> redirectPath)
                 ["robots.txt"] -> Just <$> mkTextResponse ok200 "User-agent: *\nDisallow: /"
                 _ -> -- Check for an auth cookie.
                   case removeCookie (authConfigCookieName authConfig) (parseCookies headers) of
-                    Nothing -> Just <$> redirectToLoginPage base path
+                    Nothing -> Just <$> authenticationRequired authConfig base path
                     Just (authCookie, cookies) -> do
                       auth <- validAuth authConfig authCookie
                       case auth of
-                        Nothing -> Just <$> redirectToLoginPage base path
+                        Nothing -> Just <$> authenticationRequired authConfig base path
                         Just token ->
                           forwardRequest config send authorize cookies addr request token
           forM_ mResponse (sendResponse send)

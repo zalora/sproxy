@@ -4,15 +4,14 @@
 
 module Authenticate (
   logout
-, loginPage
-, redirectToLoginPage
+, authenticationRequired
 , validAuth
 ) where
 
 import Data.ByteString (ByteString)
 import Data.Monoid ((<>))
 import Network.HTTP.Toolkit (Response, BodyReader)
-import Network.HTTP.Types (found302, ok200, urlEncode)
+import Network.HTTP.Types (found302, Status(..), urlEncode)
 import System.Posix.Time (epochTime)
 import Text.InterpolatedString.Perl6 (qc)
 import Text.Read (readMaybe)
@@ -25,15 +24,9 @@ import HTTP (mkResponse, mkHtmlResponse)
 import qualified Authenticate.Google as Google
 import qualified Authenticate.LinkedIn as LinkedIn
 
-redirectToLoginPage :: ByteString -> ByteString -> IO (Response BodyReader)
-redirectToLoginPage base path =
-  mkResponse found302 [
-    ("Location", base <> "/sproxy/login?state=" <> urlEncode True path)
-  ] ""
-
-loginPage :: AuthConfig -> ByteString -> ByteString -> IO (Response BodyReader)
-loginPage c base path =
-  mkHtmlResponse ok200 body
+authenticationRequired :: AuthConfig -> ByteString -> ByteString -> IO (Response BodyReader)
+authenticationRequired c base path =
+  mkHtmlResponse (Status 511 "Authentication Required") body
   where
     google :: ByteString
     google = maybe "" (\u -> [qc|<p><a href="{u}">Authenticate with Google</a></p>|]) (Google.authUrl c base path)

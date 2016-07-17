@@ -12,14 +12,14 @@ Why use a proxy for doing OAuth? Isn't that up to the application?
 
 ## How it Works
 
-When an HTTP client makes a request, Sproxy checks for a *session
-cookie*.  If it doesn't exist (or it's invalid, expired), it redirects
-the client to the login page, where the user can choose
-[OAuth2](https://tools.ietf.org/html/rfc6749) provider to authenticate with.
-Finally, we store the the email address in a session cookie: signed with a
-hash to prevent tampering, set for HTTP only (to prevent malicious JavaScript
-from reading it), and set it for secure (since we don't want it traveling
-over plaintext HTTP connections).
+When an HTTP client makes a request, Sproxy checks for a *session cookie*.
+If it doesn't exist (or it's invalid, expired), it responses with [HTTP
+status 511](https://tools.ietf.org/html/rfc6585) with the page, where the
+user can choose an [OAuth2](https://tools.ietf.org/html/rfc6749) provider to
+authenticate with.  Finally, we store the the email address in a session
+cookie: signed with a hash to prevent tampering, set for HTTP only (to prevent
+malicious JavaScript from reading it), and set it for secure (since we don't
+want it traveling over plaintext HTTP connections).
 
 From that point on, when sproxy detects a valid session cookie it extracts the
 email, checks it against the access rules, and relays the request to the
