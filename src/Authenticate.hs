@@ -9,9 +9,8 @@ module Authenticate (
 ) where
 
 import Data.ByteString (ByteString)
-import Data.Monoid ((<>))
 import Network.HTTP.Toolkit (Response, BodyReader)
-import Network.HTTP.Types (found302, Status(..), urlEncode)
+import Network.HTTP.Types (found302, Status(..))
 import System.Posix.Time (epochTime)
 import Text.InterpolatedString.Perl6 (qc)
 import Text.Read (readMaybe)

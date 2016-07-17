@@ -7,7 +7,7 @@ module Authenticate.Types (
 ) where
 
 import Control.Applicative (empty)
-import Data.Aeson (FromJSON, parseJSON, Value(Object), (.:), (.:?))
+import Data.Aeson (FromJSON, parseJSON, Value(Object), (.:))
 import Data.ByteString (ByteString)
 import System.Posix.Types (EpochTime)
 
