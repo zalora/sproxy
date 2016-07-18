@@ -38,7 +38,7 @@ authUrl c base path = url . oauthClientId <$> authConfigLinkedInClient c
 
 authenticate :: AuthConfig -> ByteString -> ByteString -> ByteString -> IO (Response BodyReader)
 authenticate acfg base path code = do
-  Log.info ("LinkedIn authentication request with code " ++ show code)
+  Log.debug ("LinkedIn authentication request with code " ++ show code)
   tokenRes <- try $ post "https://www.linkedin.com/oauth/v2/accessToken"
               ("code=" <> code <> "&client_id=" <> clientId
                 <> "&client_secret=" <> clientSecret <> "&redirect_uri="

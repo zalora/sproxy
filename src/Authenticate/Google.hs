@@ -38,7 +38,7 @@ authUrl c base path = url . oauthClientId <$> authConfigGoogleClient c
 
 authenticate :: AuthConfig -> ByteString -> ByteString -> ByteString -> IO (Response BodyReader)
 authenticate acfg base path code = do
-  Log.info ("Google authentication request with code " ++ show code)
+  Log.debug ("Google authentication request with code " ++ show code)
   tokenRes <- try $ post "https://accounts.google.com/o/oauth2/token"
               ("code=" <> code <> "&client_id=" <> clientId
                 <> "&client_secret=" <> clientSecret <> "&redirect_uri="
