@@ -1,7 +1,20 @@
+0.9.8
+=====
+
+* If the user is not authenticatedi, show login page with [HTTP status code
+  511](https://tools.ietf.org/html/rfc6585), instead of 302 -> 200.  It had
+  bad UX for AJAX calls.
+* Always convert authenticated user's email to lowercase. This affects the
+  cookie and the `From` header.
+* Stop using the `string-conversions` package.
+* Print authentication code in debug mode only.
+
+
 0.9.7.1
 =======
 
 * Fixed cabal source distribution
+
 
 0.9.7
 =====
