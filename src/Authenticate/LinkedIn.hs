@@ -10,6 +10,7 @@ import Control.Applicative (empty)
 import Control.Exception (try)
 import Data.Aeson (FromJSON, decode, parseJSON, Value(Object), (.:))
 import Data.ByteString (ByteString)
+import Data.Char (toLower)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Network.HTTP.Toolkit (Response, BodyReader)
@@ -59,7 +60,7 @@ authenticate acfg base path code = do
               case decode (HTTP.responseBody uresp) of
                 Nothing -> authenticationFailed "Received an invalid user info response from LinkedIn authentication server."
                 Just (LinkedInUserInfo{emailAddress, firstName, lastName}) -> do
-                  token <- mkAuthToken acfg AuthUser{ authUserEmail = emailAddress
+                  token <- mkAuthToken acfg AuthUser{ authUserEmail = map toLower emailAddress
                                                     , authUserGivenName = firstName
                                                     , authUserFamilyName = lastName }
                   let cookie = setCookie cookieDomain cookieName (show token) (authConfigShelfLife acfg)

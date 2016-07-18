@@ -10,6 +10,7 @@ import Control.Applicative (empty)
 import Control.Exception (try)
 import Data.Aeson (FromJSON, decode, parseJSON, Value(Object), (.:))
 import Data.ByteString (ByteString)
+import Data.Char (toLower)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Network.HTTP.Toolkit (Response, BodyReader)
@@ -57,7 +58,7 @@ authenticate acfg base path code = do
               case decode (HTTP.responseBody uresp) of
                 Nothing -> authenticationFailed "Received an invalid user info response from Google's authentication server."
                 Just (GoogleUserInfo{email, givenName, familyName}) -> do
-                  token <- mkAuthToken acfg AuthUser{ authUserEmail = email
+                  token <- mkAuthToken acfg AuthUser{ authUserEmail = map toLower email
                                                     , authUserGivenName = givenName
                                                     , authUserFamilyName = familyName }
                   let cookie = setCookie cookieDomain cookieName (show token) (authConfigShelfLife acfg)
