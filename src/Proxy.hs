@@ -14,7 +14,6 @@ import Data.List (intercalate)
 import Data.Map as Map (fromListWith, toList, insert, delete)
 import Data.Maybe
 import Data.Monoid
-import Data.String.Conversions (cs)
 import GHC.IO.Exception
 import Network (PortID(..), connectTo)
 import Network.HTTP.Toolkit
@@ -227,7 +226,9 @@ forwardRequest :: Config
                -> AuthToken
                -> IO (Maybe (Response BodyReader))
 forwardRequest config send authorize cookies addr request@(Request method path headers _) token = do
-    groups <- authorize (authUserEmail . authUser $ token) (maybe (error "No Host") cs $ lookup "Host" headers) path method
+    groups <- authorize (authUserEmail . authUser $ token)
+                        (fromMaybe (error "No Host") $ lookup "Host" headers)
+                        path method
     ip <- formatSockAddr addr
     case groups of
         [] -> Just <$> accessDenied (authUserEmail . authUser $ token)
@@ -235,10 +236,10 @@ forwardRequest config send authorize cookies addr request@(Request method path h
             -- TODO: Reuse connections to the backend server.
             let downStreamHeaders =
                     toList $
-                    insert "From" (cs . authUserEmail . authUser $ token) $
-                    insert "X-Groups" (cs $ intercalate "," groups) $
-                    insert "X-Given-Name" (cs . authUserGivenName . authUser $ token) $
-                    insert "X-Family-Name" (cs . authUserFamilyName . authUser $ token) $
+                    insert "From" (B8.pack . authUserEmail . authUser $ token) $
+                    insert "X-Groups" (B8.pack $ intercalate "," groups) $
+                    insert "X-Given-Name" (B8.pack . authUserGivenName . authUser $ token) $
+                    insert "X-Family-Name" (B8.pack . authUserFamilyName . authUser $ token) $
                     insert "X-Forwarded-Proto" "https" $
                     addForwardedForHeader ip $
                     insert "Connection" "close" $

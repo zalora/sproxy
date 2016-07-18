@@ -56,7 +56,6 @@ executable sproxy
     , postgresql-simple
     , resource-pool
     , split
-    , string-conversions
     , text
     , time
     , tls >= 1.3.3

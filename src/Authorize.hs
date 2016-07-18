@@ -9,14 +9,14 @@ module Authorize (
 , withDatabaseAuthorizeAction
 ) where
 
-import           Control.Exception
-import           Data.ByteString (ByteString)
-import           Network.HTTP.Types
-import           Text.InterpolatedString.Perl6 (q)
-import           Database.PostgreSQL.Simple
-import           Data.Pool
-import           Data.Time.Clock
-import           Data.String.Conversions (cs)
+import Control.Exception
+import Data.ByteString (ByteString)
+import Data.Pool
+import Data.Time.Clock
+import Database.PostgreSQL.Simple
+import Network.HTTP.Types
+import Text.InterpolatedString.Perl6 (q)
+import qualified Data.ByteString.Char8 as B8
 
 type AuthorizeAction = Email -> Domain -> RequestPath -> Method -> IO [Group]
 
@@ -31,7 +31,7 @@ createConnectionPool :: String -> IO ConnectionPool
 createConnectionPool database = createPool open close 1 connectionIdleTime connectionPoolSize
   where
     open :: IO Connection
-    open = connectPostgreSQL (cs database)
+    open = connectPostgreSQL (B8.pack database)
 
     connectionPoolSize :: Int
     connectionPoolSize = 5
