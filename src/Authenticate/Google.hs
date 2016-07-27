@@ -33,7 +33,8 @@ authUrl c base path = url . oauthClientId <$> authConfigGoogleClient c
       , "&state=", urlEncode True path
       , "&redirect_uri=", redirectUri base
       , "&response_type=code&client_id=", cid
-      , "&approval_prompt=force&access_type=offline"
+      , "&prompt=select_account"
+      , "&access_type=offline"
       ]
 
 authenticate :: AuthConfig -> ByteString -> ByteString -> ByteString -> IO (Response BodyReader)
