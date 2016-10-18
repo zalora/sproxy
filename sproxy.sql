@@ -1,4 +1,6 @@
-/* as super user:
+/*
+
+-- as super user:
 
 -- NOT idempotent
 CREATE DATABASE sproxy;
@@ -11,12 +13,9 @@ ALTER ROLE "sproxy-readonly" LOGIN;
 ALTER ROLE sproxy LOGIN;
 
 \c sproxy;
-CREATE EXTENSION IF NOT EXISTS citext;
-*/
 
-/* as database owner (sproxy):
-
-SET ROLE sproxy; -- remember, we connected to the sproxy database with \c above
+SET ROLE sproxy;
+-- as database owner (sproxy) from here on:
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO "sproxy-readonly";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "sproxy-readonly";
@@ -40,7 +39,7 @@ CREATE TABLE IF NOT EXISTS "group" (
 
 CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
-  email citext NOT NULL,
+  email TEXT NOT NULL,
   PRIMARY KEY ("group", email)
 );
 
