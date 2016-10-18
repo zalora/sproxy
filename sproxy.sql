@@ -1,6 +1,30 @@
--- CREATE DATABASE sproxy;
--- CREATE ROLE sproxy WITH LOGIN;
--- GRANT SELECT ON ALL TABLES IN SCHEMA public TO sproxy;
+/* as super user:
+
+-- NOT idempotent
+CREATE DATABASE sproxy;
+CREATE ROLE sproxy;            -- this is for management tools like sproxy-web
+CREATE ROLE "sproxy-readonly"; -- this is for sproxy itself (sic!)
+
+-- idempotent from here on:
+ALTER DATABASE sproxy OWNER TO sproxy;
+ALTER ROLE "sproxy-readonly" LOGIN;
+ALTER ROLE sproxy LOGIN;
+
+\c sproxy;
+CREATE EXTENSION IF NOT EXISTS citext;
+*/
+
+/* as database owner (sproxy):
+
+SET ROLE sproxy; -- remember, we connected to the sproxy database with \c above
+
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO "sproxy-readonly";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "sproxy-readonly";
+
+*/
+
+
+BEGIN;
 
 CREATE TABLE IF NOT EXISTS "group" (
   "group" TEXT NOT NULL PRIMARY KEY
@@ -13,7 +37,6 @@ CREATE TABLE IF NOT EXISTS "group" (
 -- | all          |
 -- | regional     |
 
-CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
@@ -38,9 +61,9 @@ CREATE TABLE IF NOT EXISTS domain (
 
 -- | domain                |
 -- |-----------------------|
--- | app1.example.com       |
--- | app2.example.com       |
--- | app3.example.com       |
+-- | app1.example.com      |
+-- | app2.example.com      |
+-- | app3.example.com      |
 
 CREATE TABLE IF NOT EXISTS privilege (
   "domain" TEXT REFERENCES domain (domain) ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
@@ -50,10 +73,10 @@ CREATE TABLE IF NOT EXISTS privilege (
 
 -- | domain                | privilege  |
 -- |-----------------------+------------|
--- | app3.example.com       | view       |
--- | app3.example.com       | export     |
--- | app1.example.com       | list users |
--- | app1.example.com       | add users  |
+-- | app3.example.com      | view       |
+-- | app3.example.com      | export     |
+-- | app1.example.com      | list users |
+-- | app1.example.com      | add users  |
 
 CREATE TABLE IF NOT EXISTS privilege_rule (
   "domain" TEXT NOT NULL,
@@ -66,11 +89,11 @@ CREATE TABLE IF NOT EXISTS privilege_rule (
 
 -- | domain                | privilege  | path      | method |
 -- |-----------------------+------------+-----------+--------|
--- | app3.example.com       | view       | /%        | %      |
--- | app3.example.com       | export     | /export/% | %      |
--- | app1.example.com       | list users | /users    | GET    |
--- | app1.example.com       | list users | /user/%   | GET    |
--- | app1.example.com       | add users  | /users    | POST   |
+-- | app3.example.com      | view       | /%        | %      |
+-- | app3.example.com      | export     | /export/% | %      |
+-- | app1.example.com      | list users | /users    | GET    |
+-- | app1.example.com      | list users | /user/%   | GET    |
+-- | app1.example.com      | add users  | /users    | POST   |
 
 CREATE TABLE IF NOT EXISTS group_privilege (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
@@ -82,10 +105,10 @@ CREATE TABLE IF NOT EXISTS group_privilege (
 
 -- | group        | domain                | privilege  |
 -- |--------------+-----------------------+------------|
--- | data science | app3.example.com       | view       |
--- | data science | app3.example.com       | export     |
--- | all          | app1.example.com       | list users |
--- | devops       | app1.example.com       | add users  |
+-- | data science | app3.example.com      | view       |
+-- | data science | app3.example.com      | export     |
+-- | all          | app1.example.com      | list users |
+-- | devops       | app1.example.com      | add users  |
 
 -- Check if the user is authorized for the request. Let's break it
 -- down for understanding:
@@ -135,4 +158,6 @@ CREATE TABLE IF NOT EXISTS group_privilege (
   INSERT INTO group_privilege ("group", domain, privilege) VALUES ('dev', 'example.com', 'full');
   INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', '%');
 */
+
+END;
 
