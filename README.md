@@ -9,6 +9,25 @@ Why use a proxy for doing OAuth? Isn't that up to the application?
  * sproxy is independent.  Any web application written in any language can use
    it.
 
+## Use cases
+
+ * Existing web applications with concept of roles. For example,
+   [Mediawiki](https://www.mediawiki.org), [Jenkins](https://jenkins.io),
+   [Icinga Web 2](https://www.icinga.org/products/icinga-web-2/). In
+   this case you configure Sproxy to allow unrestricted access
+   to the application for some groups defined by Sproxy. These
+   groups are mapped to the application roles.  There is a [plugin for
+   Jenkins](https://wiki.jenkins-ci.org/display/JENKINS/Reverse+Proxy+Auth+Plugin)
+   which can be used for this. Mediawiki and Icinga Web 2 were also
+   successfully deployed in this way, though it required changes to their
+   source code.
+
+ * New web applications designed to work specifically behind Sproxy. In this case
+   you define Sproxy rules to control access to the
+   application's API.  It would likely be [a single-page
+   application](https://en.wikipedia.org/wiki/Single-page_application).
+   Examples are [MyWatch](https://hackage.haskell.org/package/mywatch) and
+   [Juan de la Cosa](https://hackage.haskell.org/package/juandelacosa)
 
 ## How it Works
 
