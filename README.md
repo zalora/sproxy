@@ -29,7 +29,7 @@ Why use a proxy for doing OAuth? Isn't that up to the application?
    Examples are [MyWatch](https://hackage.haskell.org/package/mywatch) and
    [Juan de la Cosa](https://hackage.haskell.org/package/juandelacosa)
 
-## How it Works
+## How it works
 
 When an HTTP client makes a request, Sproxy checks for a *session cookie*.
 If it doesn't exist (or it's invalid, expired), it responses with [HTTP
@@ -138,7 +138,7 @@ devops           | all, devops    | devops
 devops           | all            | Access denied
 
 
-## Configuration File
+## Configuration file
 
 By default `sproxy` will read its configuration from
 `config/sproxy.yml`.  There is example file with documentation
