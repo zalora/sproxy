@@ -26,7 +26,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "sproxy-read
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS "group" (
-  "group" TEXT NOT NULL PRIMARY KEY
+  "group" TEXT NOT NULL PRIMARY KEY,
+  "comment" TEXT
 );
 
 -- | group        |
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS "group" (
 CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   email TEXT NOT NULL,
+  "comment" TEXT,
   PRIMARY KEY ("group", email)
 );
 
@@ -55,7 +57,8 @@ CREATE TABLE IF NOT EXISTS group_member (
 -- SELECT "group" FROM group_member WHERE 'email.address' LIKE email
 
 CREATE TABLE IF NOT EXISTS domain (
-  domain TEXT NOT NULL PRIMARY KEY
+  domain TEXT NOT NULL PRIMARY KEY,
+  "comment" TEXT
 );
 
 -- | domain                |
@@ -67,6 +70,7 @@ CREATE TABLE IF NOT EXISTS domain (
 CREATE TABLE IF NOT EXISTS privilege (
   "domain" TEXT REFERENCES domain (domain) ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   privilege TEXT NOT NULL,
+  "comment" TEXT,
   PRIMARY KEY ("domain", privilege)
 );
 
@@ -82,6 +86,7 @@ CREATE TABLE IF NOT EXISTS privilege_rule (
   privilege TEXT NOT NULL,
   "path" TEXT NOT NULL,
   "method" TEXT NOT NULL,
+  "comment" TEXT,
   FOREIGN KEY ("domain", privilege) REFERENCES privilege ("domain", privilege) ON UPDATE CASCADE ON DELETE CASCADE,
   PRIMARY KEY ("domain", "path", "method")
 );
@@ -98,6 +103,7 @@ CREATE TABLE IF NOT EXISTS group_privilege (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   "domain" TEXT NOT NULL,
   privilege TEXT NOT NULL,
+  "comment" TEXT,
   FOREIGN KEY ("domain", privilege) REFERENCES privilege ("domain", privilege) ON UPDATE CASCADE ON DELETE CASCADE,
   PRIMARY KEY ("group", "domain", privilege)
 );
