@@ -1,0 +1,72 @@
+name: sproxy2
+version: 1.90.0
+synopsis: Secure HTTP proxy for authenticating users via OAuth2
+description:
+  Sproxy is secure by default. No requests makes it to the backend
+  server if they haven't been explicitly whitelisted.  Sproxy is
+  independent. Any web application written in any language can
+  use it.
+license: MIT
+license-file: LICENSE
+author: Igor Pashev <pashev.igor@gmail.com>
+maintainer: Igor Pashev <pashev.igor@gmail.com>
+copyright: 2016, Zalora South East Asia Pte. Ltd
+category: Databases, Web
+build-type: Simple
+extra-source-files: README.md ChangeLog.md sproxy.yml.example sproxy.sql
+cabal-version: >= 1.20
+
+source-repository head
+  type: git
+  location: https://github.com/ip1981/sproxy2.git
+
+executable sproxy2
+    default-language: Haskell2010
+    ghc-options: -Wall -static -threaded
+    hs-source-dirs: src
+    main-is: Main.hs
+    other-modules:
+      Sproxy.Application
+      Sproxy.Application.Cookie
+      Sproxy.Application.OAuth2
+      Sproxy.Application.OAuth2.Common
+      Sproxy.Application.OAuth2.Google
+      Sproxy.Application.OAuth2.LinkedIn
+      Sproxy.Application.State
+      Sproxy.Config
+      Sproxy.Logging
+      Sproxy.Server
+      Sproxy.Server.DB
+    build-depends:
+        base >= 4.8 && < 50
+      , aeson
+      , base64-bytestring
+      , blaze-builder
+      , bytestring
+      , cereal
+      , conduit
+      , containers
+      , cookie >= 0.4.2
+      , docopt
+      , entropy
+      , Glob
+      , http-client >= 0.5.3
+      , http-conduit
+      , http-types
+      , interpolatedstring-perl6
+      , network
+      , postgresql-simple
+      , resource-pool
+      , SHA
+      , sqlite-simple
+      , text
+      , time
+      , unix
+      , unordered-containers
+      , wai
+      , wai-conduit
+      , warp
+      , warp-tls >= 3.2
+      , word8
+      , yaml >= 0.8.4
+

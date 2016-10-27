@@ -1,0 +1,139 @@
+--- # Sproxy configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
+
+# The port Sproxy listens on (HTTPS).
+# Optional. Default is 443.
+# 
+# listen: 443
+
+# Listen on port 80 and redirect HTTP requests to HTTPS.
+# Optional. Default is true when listen == 443, otherwise false.
+#
+# listen80: true
+
+# Whether HTTP2 is enabled. Optional. Default is "true"
+#
+# http2: true
+
+# The system user Sproxy switches to if launched as root (after opening the ports).
+# Optional. Default is sproxy.
+#
+# user: sproxy
+
+# Home directory for various files including SQLite3 authorization database.
+# Optional. Default is current directory.
+#
+# home: "."
+
+# PostgreSQL database connection string.
+# Optional. If specified, sproxy will periodically pull the data from this
+# database into internal SQLite3 database. Define password in a file
+# referenced by the PGPASSFILE environment variable. Or use the "pgpassfile" option.
+# Example:
+# database: "user=sproxy-readonly dbname=sproxy port=6001"
+#
+# database:
+
+# PostgreSQL password file.
+# Optional. If specified, sproxy will set PGPASSFILE environment variable pointing to this file
+# Example:
+# pgpassfile: /run/keys/sproxy.pgpass
+#
+# pgpassfile:
+
+# Logging level: debug, info, warn, error.
+# Optional. Default is debug.
+# 
+# log_level: debug
+
+# A file with arbitrary content used to sign sproxy cookie and other things (secret!).
+# Optional. If not specified, a random key is generated on startup, and
+# as a consequence, restaring sproxy will invalidate existing user sessions.
+# This option could be useful for load-balancing with multiple sproxy instances,
+# when all instances must understand cookies created by each other.
+# This should not be very large, a few random bytes are fine.
+# 
+# key: /run/keys/sproxy.secret
+
+# File with SSL certificate. Required.
+# It can be a bundle with the server certificate coming first:
+# cat me-cert.pem CA-cert.pem > cert.pem
+# Once again: most wanted certs go first ;-)
+# Or you can opt in using of `ssl_cert_chain`
+ssl_cert: /path/cert.pem
+
+# File with SSL key (secret!). Required.
+ssl_key: /path/key.pem
+
+# Chain SSL certificate files.
+# Optional. Default is an empty list
+# Example:
+# ssl_cert_chain:
+#   - /path/foo.pem
+#   - /path/bar.pem
+# 
+# ssl_cert_chain: []
+
+
+# Credentials for supported OAuth2 providers.
+# Currently supported: "google", "linkedin"
+# At least one provider is required.
+# Attributes:
+#   client_id     - OAuth2 client ID (string)
+#   client_secret - OAuth2 client secret. Regardless of its name, this is a file.
+#                   The secret is read from the file which you should keep secret.
+#                   Only the first line of this file is read.
+#
+# Example:
+# oauth2:
+#   google:
+#     client_id: "XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com"
+#     client_secret: "/run/keys/XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com"
+#
+#   linkedin:
+#     client_id: "xxxxxxxxxxxxxx"
+#     client_secret: "/run/keys/xxxxxxxxxxxxxx"
+#
+#
+# oauth2:
+#   google:
+#     client_id:
+#     client_secret:
+
+
+# Backend servers. At least one is required.
+# NOTE: backends at TCP port are not secure, even on localhost,
+# because any local user can connect to the backend bypassing sproxy
+# authentication and authorization.
+#
+# It is recommended to communicate with backends via unix sockets only.
+# Unix sockets should be secured with proper unix file permissions.
+#
+# Backend attributes:
+#   name      - the host name as in the Host HTTP header.
+#               May include wildcards * and ?. The first matching
+#               backend will be used. Examples: "*.example.com", "wiki.corp.com".
+#               Optional. Default is "*". Note, that the name must include
+#               port number if non-standard.
+#   address   - backend IP address. Optional. Default is 127.0.0.1.
+#   port      - backend TCP port. Required unless unix socket is defined.
+#   socket    - unix socket. Highly recommended for security reasons.
+#               If defined, IP address and TCP port are ignored.
+#
+#   cookie_name    - sproxy cookie name. Optional. Default is "sproxy".
+#   cookie_domain  - sproxy cookie domain. Optional. Default is the request host name as per RFC2109.
+#   cookie_max_age - sproxy cookie shelflife in seconds. Optional. Default is 604800 (7 days).
+#   conn_count     - number of connections to keep alive. Optional. Default is 32.
+#                    This is specific to Haskell HTTP Client library, and is per host name,
+#                    not per backend. HTTP Client's default is 10.
+#
+# backends:
+#   - name: wiki.example.com
+#     port: 9090
+#     cookie_name: sproxy_example
+#     cookie_max_age: 86400
+#
+backends:
+  - port: 8080
+
+... # End of configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
+

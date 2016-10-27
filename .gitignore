@@ -1,0 +1,7 @@
+*.sqlite3*
+*.swp
+/.cabal-sandbox/
+/cabal-dev/
+/cabal.sandbox.config
+/dist/
+sproxy.yml
