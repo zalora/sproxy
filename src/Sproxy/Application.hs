@@ -243,7 +243,9 @@ authenticationRequired key oa2 req resp = do
   Log.info $ "511 Unauthenticated: " ++ showReq req
   resp $ W.responseLBS networkAuthenticationRequired511 [(hContentType, "text/html; charset=utf-8")] page
   where
-    path = W.rawPathInfo req -- FIXME: make it more robust for non-GET or XMLHTTPRequest?
+    path = if W.requestMethod req == methodGet
+           then W.rawPathInfo req <> W.rawQueryString req
+           else "/"
     state = State.encode key path
     authLink :: Text -> OAuth2Client -> ByteString -> ByteString
     authLink provider oa2c html = 
