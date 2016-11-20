@@ -368,6 +368,7 @@ showReq req =
     unpack ( W.requestMethod req <> " "
            <> fromMaybe "<no host>" (W.requestHeaderHost req)
            <> W.rawPathInfo req <> W.rawQueryString req <> " " )
+    ++ show (W.httpVersion req) ++ " "
     ++ show (fromMaybe "-" $ W.requestHeaderReferer req) ++ " "
     ++ show (fromMaybe "-" $ W.requestHeaderUserAgent req)
     ++ " from " ++ show (W.remoteHost req)
