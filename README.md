@@ -1,4 +1,7 @@
-# Sproxy2 - HTTP proxy for authenticating users via OAuth2
+# Sproxy2
+
+HTTP proxy for authenticating users via OAuth2.
+
 
 ## Motivation
 
@@ -32,7 +35,9 @@ Why use a proxy for doing OAuth2? Isn't that up to the application?
    Examples are [MyWatch](https://hackage.haskell.org/package/mywatch) and
    [Juan de la Cosa](https://hackage.haskell.org/package/juandelacosa)
 
-## How it works
+
+How it works
+============
 
 When an HTTP client makes a request, Sproxy checks for a *session cookie*.
 If it doesn't exist (or it's invalid, expired), it responses with [HTTP
@@ -48,25 +53,8 @@ email, checks it against the access rules, and relays the request to the
 back-end server (if allowed).
 
 
-## Logout
-
-Hitting the endpoint `/.sproxy/logout` will invalidate the session cookie.
-The user will be redirected to `/` after logout.
-
-
-## Robots
-
-Since all sproxied resources are private, it doesn't make sense for web
-crawlers to try to index them. In fact, crawlers will index only the login
-page. To prevent this, sproxy returns the following for `/robots.txt`:
-
-```
-User-agent: *
-Disallow: /
-```
-
-
-## Permissions system
+Permissions system
+------------------
 
 Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
 Here are the main concepts:
@@ -88,8 +76,19 @@ Do note that Sproxy2 fetches only `group_member`, `group_privilege` and `privile
 tables, because only these tables are used for authorization. The other tables
 serve for data integrity.
 
+Keep in mind that:
 
-### Privileges example
+- Domains are converted into lower case (coming from PostgreSQL or HTTP requests).
+- Emails are converted into lower case (coming from PostgreSQL or OAuth2 providers).
+- Groups are case-sensitive and treated as is.
+- HTTP methods are *case-sensitive*.
+- HTTP query parameters are ignored when matching a request against the rules.
+- Privileges are case-sensitive and treated as is.
+- SQL wildcards (`_` and `%`) are supported for emails, domains, paths.
+
+
+Privileges example
+------------------
 
 Consider this `group_privilege` and `privilege_rule` relations:
 
@@ -124,7 +123,8 @@ privilege.
 Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
 
 
-## HTTP headers passed to the back-end server:
+HTTP headers passed to the back-end server
+------------------------------------------
 
 header               | value
 -------------------- | -----
@@ -148,14 +148,49 @@ devops           | all, devops    | devops
 devops           | all            | Access denied
 
 
-## Configuration file
+Logout
+------
 
-By default `sproxy2` will read its configuration from
-`sproxy.yml`.  There is example file with documentation
-[sproxy.yml.example](sproxy.yml.example). You can specify a
-custom path with:
+Hitting the endpoint `/.sproxy/logout` will invalidate the session cookie.
+The user will be redirected to `/` after logout.
+
+
+Robots
+------
+
+Since all sproxied resources are private, it doesn't make sense for web
+crawlers to try to index them. In fact, crawlers will index only the login
+page. To prevent this, sproxy returns the following for `/robots.txt`:
 
 ```
-sproxy --config /path/to/sproxy.yml
+User-agent: *
+Disallow: /
+```
+
+
+Requirements
+============
+Sproxy2 is written in Haskell with [GHC](http://www.haskell.org/ghc/).
+All required Haskell libraries are listed in [sproxy2.cabal](sproxy2.cabal).
+Use [cabal-install](http://www.haskell.org/haskellwiki/Cabal-Install)
+to fetch and build all pre-requisites automatically.
+
+
+Installation
+============
+    $ git clone https://github.com/zalora/sproxy2.git
+    $ cd sproxy2
+    $ cabal install
+
+
+Configuration
+=============
+
+By default `sproxy2` will read its configuration from `sproxy.yml`.  There is
+example file with documentation [sproxy.yml.example](sproxy.yml.example). You
+can specify a custom path with:
+
+```
+sproxy2 --config /path/to/sproxy.yml
 ```
 
