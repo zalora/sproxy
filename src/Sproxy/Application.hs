@@ -28,8 +28,9 @@ import Data.Word8 (_colon)
 import Foreign.C.Types (CTime(..))
 import Network.HTTP.Client.Conduit (bodyReaderSource)
 import Network.HTTP.Conduit (requestBodySourceChunkedIO, requestBodySourceIO)
-import Network.HTTP.Types (RequestHeaders, ResponseHeaders, hConnection,
-  hContentLength, hContentType, hCookie, hLocation, methodGet)
+import Network.HTTP.Types (RequestHeaders, ResponseHeaders, methodGet)
+import Network.HTTP.Types.Header ( hConnection,
+  hContentLength, hContentType, hCookie, hLocation, hTransferEncoding )
 import Network.HTTP.Types.Status ( Status(..), badRequest400, forbidden403, found302,
   internalServerError500, methodNotAllowed405, movedPermanently301,
   networkAuthenticationRequired511, notFound404, ok200, seeOther303, temporaryRedirect307 )
@@ -227,7 +228,8 @@ modifyRequestHeaders = filter (\(n, _) -> n `notElem` ban)
     ban =
       [
         hConnection
-      , hContentLength -- XXX to avoid duplicate header
+      , hContentLength    -- XXX This is set automtically before sending request to backend
+      , hTransferEncoding -- XXX Likewise
       ]
 
 modifyResponseHeaders :: ResponseHeaders -> ResponseHeaders
@@ -236,6 +238,7 @@ modifyResponseHeaders = filter (\(n, _) -> n `notElem` ban)
     ban =
       [
         hConnection
+      , hTransferEncoding -- XXX This is set automtically when sending respond from sproxy
       ]
 
 authenticationRequired :: ByteString -> HashMap Text OAuth2Client -> W.Application
