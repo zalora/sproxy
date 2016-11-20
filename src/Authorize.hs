@@ -59,9 +59,8 @@ INNER JOIN group_member gm ON gm."group" = gp."group"
 WHERE ? LIKE email
 AND ? LIKE "domain"
 AND privilege IN (
-  SELECT p.privilege FROM privilege p
-  INNER JOIN privilege_rule pr ON pr."domain" = p."domain" AND pr.privilege = p.privilege
-  WHERE ? LIKE pr."domain" AND ? LIKE "path" AND ? ILIKE "method"
+  SELECT privilege FROM privilege_rule
+  WHERE ? LIKE "domain" AND ? LIKE "path" AND ? ILIKE "method"
   ORDER by array_length(regexp_split_to_array("path", '/'), 1) DESC LIMIT 1
 )
 |] (email, domain, domain, path, method)
