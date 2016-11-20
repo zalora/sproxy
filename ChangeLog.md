@@ -1,3 +1,10 @@
+0.9.9
+=====
+
+* This is the last release of this Sproxy. See [Sproxy2](http://hackage.haskell.org/package/sproxy2).
+* Google: prompt for account only, don't ask for offline access.
+
+
 0.9.8
 =====
 

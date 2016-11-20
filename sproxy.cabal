@@ -1,6 +1,10 @@
 name: sproxy
-version: 0.9.8
+version: 0.9.9
 synopsis: HTTP proxy for authenticating users via OAuth2
+description:
+  This version is no longer supported.
+  Have a look at Sproxy2 (http://hackage.haskell.org/package/sproxy2),
+  which goes far beyond Sproxy's features and limitations.
 license: MIT
 license-file: LICENSE
 copyright: 2013-2016, Zalora South East Asia Pte. Ltd
