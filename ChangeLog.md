@@ -1,5 +1,19 @@
 For differences with the original Sproxy scroll down.
 
+
+1.90.1
+======
+
+  * Fixed headers processing. Wrong headers were making Chromium drop connection in HTTP/2.
+    Firefox sometimes couldn't handle gzipped and chunked responses in HTTP/1.1.
+
+  * After authenticating, redirect to original path with query parameters if
+    method was GET.  Otherwise redirect to "/". Previously, when unauthenticated
+    users click on "https://example.net/foo?bar", they are redirected to
+    "https://example.net/foo" regardless of the method.
+
+
+
 1.90.0 (Preview Release)
 ========================
 
