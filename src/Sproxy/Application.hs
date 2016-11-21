@@ -214,12 +214,12 @@ forward mgr req resp = do
   Log.debug $ "BACKEND <<< " ++ msg ++ " " ++ show (BE.requestHeaders beReq)
   BE.withResponse beReq mgr $ \res -> do
         let status = BE.responseStatus res
-            headers = modifyResponseHeaders $ BE.responseHeaders res
+            headers = BE.responseHeaders res
             body = mapOutput (Chunk . fromByteString) . bodyReaderSource $ BE.responseBody res
             logging = if statusCode status `elem` [ 400, 500 ] then
                       Log.warn else Log.debug
-        logging $ "BACKEND >>> " ++ show (statusCode status) ++ " on " ++ msg ++ "\n"
-        resp $ responseSource status headers body
+        logging $ "BACKEND >>> " ++ show (statusCode status) ++ " on " ++ msg ++ " " ++ show headers ++ "\n"
+        resp $ responseSource status (modifyResponseHeaders headers) body
 
 
 modifyRequestHeaders :: RequestHeaders -> RequestHeaders
