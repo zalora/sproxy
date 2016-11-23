@@ -8,7 +8,7 @@ module Sproxy.Application (
 
 import Blaze.ByteString.Builder (toByteString)
 import Blaze.ByteString.Builder.ByteString (fromByteString)
-import Control.Exception (SomeException, catch)
+import Control.Exception (Exception, Handler(..), SomeException, catches, displayException)
 import Data.ByteString (ByteString)
 import Data.ByteString as BS (break, intercalate)
 import Data.Char (toLower)
@@ -346,9 +346,20 @@ notFound msg req resp = do
 
 
 logException :: W.Middleware
-logException app req resp = catch (app req resp) $ \e -> do
-  Log.error $ "500 Internal Error: " ++ show (e :: SomeException) ++ " on " ++ showReq req
-  resp $ W.responseLBS internalServerError500 [] "Internal Error"
+logException app req resp =
+  catches (app req resp) [
+    Handler internalError
+  ]
+  where
+    internalError :: SomeException -> IO W.ResponseReceived
+    internalError = response internalServerError500
+
+    response :: Exception e => Status -> e -> IO W.ResponseReceived
+    response st e = do
+      Log.error $ show (statusCode st) ++ " " ++ unpack (statusMessage st)
+                ++ ": " ++ displayException e ++ " on " ++ showReq req
+      resp $ W.responseLBS st [(hContentType, "text/plain")] (fromStrict $ statusMessage st)
+
 
 
 get :: W.Middleware
