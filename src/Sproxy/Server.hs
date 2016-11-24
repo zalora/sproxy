@@ -18,7 +18,8 @@ import Network.Socket ( Family(AF_INET, AF_UNIX), SockAddr(SockAddrInet, SockAdd
   SocketOption(ReuseAddr), SocketType(Stream), bind, close, connect, inet_addr,
   listen, maxListenQueue, setSocketOption, socket )
 import Network.Wai.Handler.WarpTLS (tlsSettingsChain, runTLSSocket)
-import Network.Wai.Handler.Warp (defaultSettings, setHTTP2Disabled, runSettingsSocket)
+import Network.Wai.Handler.Warp ( defaultSettings, runSettingsSocket,
+  setHTTP2Disabled, setOnException )
 import System.Entropy (getEntropy)
 import System.Environment (setEnv)
 import System.Exit (exitFailure)
@@ -96,7 +97,8 @@ server configFile = do
 
   let
     settings =
-      (if cfHTTP2 cf then id else setHTTP2Disabled)
+      (if cfHTTP2 cf then id else setHTTP2Disabled) $
+      setOnException (\_ _ -> return ())
       defaultSettings
 
   -- XXX 2048 is from bindPortTCP from streaming-commons used internally by runTLS.
