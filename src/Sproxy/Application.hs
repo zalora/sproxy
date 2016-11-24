@@ -197,6 +197,9 @@ authorize db (authCookie, otherCookies) req = do
     setCookies cs = insert hCookie (toByteString . renderCookies $ cs)
 
 
+-- XXX If something seems strange, think about HTTP/1.1 <-> HTTP/1.0.
+-- FIXME For HTTP/1.0 backends we might need an option
+-- FIXME in config file. HTTP Client does HTTP/1.1 by default.
 forward :: BE.Manager -> W.Application
 forward mgr req resp = do
   let beReq = BE.defaultRequest
@@ -232,14 +235,19 @@ modifyRequestHeaders = filter (\(n, _) -> n `notElem` ban)
       , hTransferEncoding -- XXX Likewise
       ]
 
+
 modifyResponseHeaders :: ResponseHeaders -> ResponseHeaders
 modifyResponseHeaders = filter (\(n, _) -> n `notElem` ban)
   where
     ban =
       [
         hConnection
-      , hTransferEncoding -- XXX This is set automtically when sending respond from sproxy
+      -- XXX WAI docs say we MUST NOT add (keep) Content-Length, Content-Range, and Transfer-Encoding,
+      -- XXX but we use streaming body, which may add Transfer-Encoding only.
+      -- XXX Thus we keep Content-* headers.
+      , hTransferEncoding
       ]
+
 
 authenticationRequired :: ByteString -> HashMap Text OAuth2Client -> W.Application
 authenticationRequired key oa2 req resp = do
