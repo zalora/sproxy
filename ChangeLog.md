@@ -1,6 +1,20 @@
 For differences with the original Sproxy scroll down.
 
 
+1.90.2
+======
+
+  * Make sure all Sproxy-specific HTTP headers are UTF8-encoded.
+
+  * `/.sproxy/logout` just redirects if no cookie. Previously
+    it was returning HTTP 404 to unauthenticated users, and redirecting
+    authenticated users with removal of the cookie. The point is not to
+    reveal cookie name.
+
+  * Made Warp stop printing exceptions, mostly "client closed connection",
+    which happens outside of our traps.
+
+
 1.90.1
 ======
 
