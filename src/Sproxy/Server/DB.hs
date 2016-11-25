@@ -11,11 +11,9 @@ module Sproxy.Server.DB (
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Exception (SomeException, bracket, catch, finally)
 import Control.Monad (forever, void)
-import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (pack)
 import Data.Pool (Pool, createPool, withResource)
 import Data.Text (Text, toLower, unpack)
-import Data.Text.Encoding (encodeUtf8)
 import Database.SQLite.Simple (NamedParam((:=)))
 import Text.InterpolatedString.Perl6 (q, qc)
 import qualified Database.PostgreSQL.Simple as PG
@@ -52,7 +50,7 @@ start home ds = do
   return db
 
 
-userExists :: Database -> String -> IO Bool
+userExists :: Database -> Text -> IO Bool
 userExists db email = do
   r <- withResource db $ \c -> fmap SQLite.fromOnly <$> SQLite.queryNamed c
     "SELECT EXISTS (SELECT 1 FROM group_member WHERE :email LIKE email LIMIT 1)"
@@ -60,9 +58,9 @@ userExists db email = do
   return $ head r
 
 
-userGroups :: Database -> String -> Text -> Text -> Text -> IO [ByteString]
+userGroups :: Database -> Text -> Text -> Text -> Text -> IO [Text]
 userGroups db email domain path method =
-  withResource db $ \c -> fmap (encodeUtf8 . SQLite.fromOnly) <$> SQLite.queryNamed c [q|
+  withResource db $ \c -> fmap SQLite.fromOnly <$> SQLite.queryNamed c [q|
       SELECT gm."group" FROM group_privilege gp JOIN group_member gm ON gm."group"  = gp."group"
       WHERE :email LIKE gm.email
       AND :domain LIKE gp.domain

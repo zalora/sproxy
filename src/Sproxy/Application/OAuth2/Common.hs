@@ -8,6 +8,7 @@ module Sproxy.Application.OAuth2.Common (
 import Control.Applicative (empty)
 import Data.Aeson (FromJSON, parseJSON, Value(Object), (.:))
 import Data.ByteString(ByteString)
+import Data.Text (Text)
 
 import Sproxy.Application.Cookie (AuthUser)
 
@@ -29,7 +30,7 @@ type OAuth2Provider = (ByteString, ByteString) -> OAuth2Client
 --   and expires_in because we don't use them, *and* expires_in creates troubles:
 --   it's an integer from Google and string from LinkedIn (sic!)
 data AccessTokenBody = AccessTokenBody {
-  accessToken :: String
+  accessToken :: Text
 } deriving (Eq, Show)
 
 instance FromJSON AccessTokenBody where

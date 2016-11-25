@@ -7,15 +7,16 @@ module Sproxy.Application.OAuth2.LinkedIn (
 import Control.Applicative (empty)
 import Control.Exception (Exception, throwIO)
 import Data.Aeson (FromJSON, decode, parseJSON, Value(Object), (.:))
-import Data.ByteString.Char8 (pack)
 import Data.ByteString.Lazy (ByteString)
 import Data.Monoid ((<>))
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Typeable (Typeable)
 import Network.HTTP.Types (hContentType)
 import Network.HTTP.Types.URI (urlEncode)
 import qualified Network.HTTP.Conduit as H
 
-import Sproxy.Application.Cookie (AuthUser(..))
+import Sproxy.Application.Cookie (newUser, setFamilyName, setGivenName)
 import Sproxy.Application.OAuth2.Common (AccessTokenBody(accessToken), OAuth2Client(..), OAuth2Provider)
 
 
@@ -50,14 +51,14 @@ provider (client_id, client_secret) =
         Just atResp -> do
           let ureq = (H.parseRequest_ "https://api.linkedin.com/v1/people/\
                 \~:(email-address,first-name,last-name)?format=json") {
-                  H.requestHeaders = [ ("Authorization", "Bearer " <> pack (accessToken atResp)) ]
+                  H.requestHeaders = [ ("Authorization", "Bearer " <> encodeUtf8 (accessToken atResp)) ]
                 }
           uresp <- H.httpLbs ureq mgr
           case decode $ H.responseBody uresp of
             Nothing -> throwIO $ LinkedInException uresp
-            Just u -> return AuthUser { auEmail = emailAddress u
-                                      , auGivenName = firstName u
-                                      , auFamilyName = lastName u }
+            Just u -> return $ setFamilyName (lastName u) $
+                               setGivenName (firstName u) $
+                               newUser (emailAddress u)
   }
 
 
@@ -69,9 +70,9 @@ instance Exception LinkedInException
 
 
 data LinkedInUserInfo = LinkedInUserInfo {
-  emailAddress :: String
-, firstName :: String
-, lastName :: String
+  emailAddress :: Text
+, firstName :: Text
+, lastName :: Text
 } deriving (Eq, Show)
 
 instance FromJSON LinkedInUserInfo where

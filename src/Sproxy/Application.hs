@@ -11,7 +11,6 @@ import Blaze.ByteString.Builder.ByteString (fromByteString)
 import Control.Exception (Exception, Handler(..), SomeException, catches, displayException)
 import Data.ByteString (ByteString)
 import Data.ByteString as BS (break, intercalate)
-import Data.Char (toLower)
 import Data.ByteString.Char8 (pack, unpack)
 import Data.ByteString.Lazy (fromStrict)
 import Data.Conduit (Flush(Chunk), mapOutput)
@@ -44,7 +43,9 @@ import qualified Network.HTTP.Client as BE
 import qualified Network.Wai as W
 import qualified Web.Cookie as WC
 
-import Sproxy.Application.Cookie (AuthCookie(..), AuthUser(..), cookieDecode, cookieEncode)
+import Sproxy.Application.Cookie ( AuthCookie(..), AuthUser,
+  cookieDecode, cookieEncode, getEmail, getEmailUtf8, getFamilyNameUtf8,
+  getGivenNameUtf8 )
 import Sproxy.Application.OAuth2.Common (OAuth2Client(..))
 import Sproxy.Config(BackendConf(..))
 import Sproxy.Server.DB (Database, userExists, userGroups)
@@ -115,11 +116,11 @@ oauth2callback key db (provider, oa2c) be req resp =
             Left msg   -> badRequest ("invalid state: " ++ msg) req resp
             Right path -> do
               au <- oauth2Authenticate oa2c code (redirectURL req provider)
-              let email = map toLower $ auEmail au
-              Log.info $ "login `" ++ email ++ "' by " ++ show provider
+              let email = getEmail au
+              Log.info $ "login " ++ show email ++ " by " ++ show provider
               exists <- userExists db email
-              if exists then authenticate key be au{auEmail = email} path req resp
-                        else userNotFound email req resp
+              if exists then authenticate key be au path req resp
+                        else userNotFound au req resp
   where
     param p = do
       (_, v) <- find ((==) p . fst) $ W.queryString req
@@ -166,29 +167,31 @@ authenticate key be user path req resp = do
 
 authorize :: Database -> (AuthCookie, Cookies) -> W.Request -> IO (Maybe W.Request)
 authorize db (authCookie, otherCookies) req = do
+  let
+    user       = acUser authCookie
+    domain     = decodeUtf8 . fromJust $ W.requestHeaderHost req
+    email      = getEmail user
+    emailUtf8  = getEmailUtf8 user
+    familyUtf8 = getFamilyNameUtf8 user
+    givenUtf8  = getGivenNameUtf8 user
+    method     = decodeUtf8 $ W.requestMethod req
+    path       = decodeUtf8 $ W.rawPathInfo req
   grps <- userGroups db email domain path method
   if null grps then return Nothing
   else do
     ip <- pack . fromJust . fst <$> getNameInfo [NI_NUMERICHOST] True False (W.remoteHost req)
     return . Just $ req {
     W.requestHeaders = toList $
-      insert "From" (pack email) $
-      insert "X-Groups" (BS.intercalate "," grps) $
-      insert "X-Given-Name" given $
-      insert "X-Family-Name" family $
+      insert "From" emailUtf8 $
+      insert "X-Groups" (BS.intercalate "," $ encodeUtf8 <$> grps) $
+      insert "X-Given-Name" givenUtf8 $
+      insert "X-Family-Name" familyUtf8 $
       insert "X-Forwarded-Proto" "https" $
       insertWith (flip combine) "X-Forwarded-For" ip $
       setCookies otherCookies $
       fromListWith combine $ W.requestHeaders req
   }
   where
-    user = acUser authCookie
-    email = auEmail user
-    given = pack $ auGivenName user
-    family = pack $ auFamilyName user
-    domain = decodeUtf8 . fromJust $ W.requestHeaderHost req
-    path = decodeUtf8 $ W.rawPathInfo req
-    method = decodeUtf8 $ W.requestMethod req
     combine a b = a <> "," <> b
     setCookies [] = delete hCookie
     setCookies cs = insert hCookie (toByteString . renderCookies $ cs)
@@ -278,10 +281,10 @@ authenticationRequired key oa2 req resp = do
 
 forbidden :: AuthCookie -> W.Application
 forbidden ac req resp = do
-  Log.info $ "403 Forbidden (" ++ email ++ "): " ++ showReq req
+  Log.info $ "403 Forbidden: " ++ show email ++ ": " ++ showReq req
   resp $ W.responseLBS forbidden403 [(hContentType, "text/html; charset=utf-8")] page
   where
-    email = auEmail . acUser $ ac
+    email = getEmailUtf8 . acUser $ ac
     page = fromStrict [qc|
 <!DOCTYPE html>
 <html lang="en">
@@ -298,11 +301,12 @@ forbidden ac req resp = do
 |]
 
 
-userNotFound :: String -> W.Application
-userNotFound email _ resp = do
-  Log.info $ "404 User not found (" ++ email ++ ")"
+userNotFound :: AuthUser -> W.Application
+userNotFound au _ resp = do
+  Log.info $ "404 User not found: " ++ show email
   resp $ W.responseLBS notFound404 [(hContentType, "text/html; charset=utf-8")] page
   where
+    email = getEmailUtf8 au
     page = fromStrict [qc|
 <!DOCTYPE html>
 <html lang="en">

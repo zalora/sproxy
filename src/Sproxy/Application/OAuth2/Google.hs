@@ -9,12 +9,13 @@ import Control.Exception (Exception, throwIO)
 import Data.Aeson (FromJSON, decode, parseJSON, Value(Object), (.:))
 import Data.ByteString.Lazy (ByteString)
 import Data.Monoid ((<>))
+import Data.Text (Text, unpack)
 import Data.Typeable (Typeable)
 import Network.HTTP.Types (hContentType)
 import Network.HTTP.Types.URI (urlEncode)
 import qualified Network.HTTP.Conduit as H
 
-import Sproxy.Application.Cookie (AuthUser(..))
+import Sproxy.Application.Cookie (newUser, setFamilyName, setGivenName)
 import Sproxy.Application.OAuth2.Common (AccessTokenBody(accessToken), OAuth2Client(..), OAuth2Provider)
 
 
@@ -48,11 +49,13 @@ provider (client_id, client_secret) =
       case decode $ H.responseBody tresp of
         Nothing -> throwIO $ GoogleException tresp
         Just atResp -> do
-          ureq  <- H.parseRequest $ "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" ++ accessToken atResp
+          ureq  <- H.parseRequest $ unpack ("https://www.googleapis.com/oauth2/v1/userinfo?access_token=" <> accessToken atResp)
           uresp <- H.httpLbs ureq mgr
           case decode $ H.responseBody uresp of
             Nothing -> throwIO $ GoogleException uresp
-            Just u -> return AuthUser { auEmail = email u, auGivenName = givenName u, auFamilyName = familyName u }
+            Just u -> return $ setFamilyName (familyName u) $
+                               setGivenName (givenName u) $
+                               newUser (email u)
   }
 
 
@@ -64,9 +67,9 @@ instance Exception GoogleException
 
 
 data GoogleUserInfo = GoogleUserInfo {
-  email :: String
-, givenName :: String
-, familyName :: String
+  email :: Text
+, givenName :: Text
+, familyName :: Text
 } deriving (Eq, Show)
 
 instance FromJSON GoogleUserInfo where

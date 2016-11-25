@@ -126,9 +126,12 @@ Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
 HTTP headers passed to the back-end server
 ------------------------------------------
 
+All Sproxy headers are UTF8-encoded.
+
+
 header               | value
 -------------------- | -----
-`From:`              | visitor's email address
+`From:`              | visitor's email address, lower case
 `X-Groups:`          | all groups that granted access to this resource, separated by commas (see the note below)
 `X-Given-Name:`      | the visitor's given (first) name
 `X-Family-Name:`     | the visitor's family (last) name
