@@ -81,10 +81,7 @@ sproxy key db oa2 backends = logException $ \req resp -> do
             ["robots.txt"] -> get robots req resp
             (".sproxy":proxy) ->
               case proxy of
-                ["logout"] ->
-                  case extractCookie key Nothing cookieName req of
-                    Nothing -> notFound "logout without the cookie" req resp
-                    Just _  -> get (logout cookieName cookieDomain) req resp
+                ["logout"] -> get (logout key cookieName cookieDomain) req resp
                 ["oauth2", provider] ->
                     case HM.lookup provider oa2 of
                       Nothing -> notFound "OAuth2 provider" req resp
@@ -322,23 +319,26 @@ userNotFound email _ resp = do
 |]
 
 
-logout :: ByteString -> Maybe ByteString -> W.Application
-logout name domain req resp = do
+logout :: ByteString -> ByteString -> Maybe ByteString -> W.Application
+logout key cookieName cookieDomain req resp = do
   let host = fromJust $ W.requestHeaderHost req
-      cookie = WC.def {
-        WC.setCookieName = name
-      , WC.setCookieHttpOnly = True
-      , WC.setCookiePath = Just "/"
-      , WC.setCookieSameSite = Just WC.sameSiteStrict
-      , WC.setCookieSecure = True
-      , WC.setCookieValue = "goodbye"
-      , WC.setCookieDomain = domain
-      , WC.setCookieExpires = Just . posixSecondsToUTCTime . realToFrac $ CTime 0
-      }
-  resp $ W.responseLBS found302 [
-           (hLocation, "https://" <> host)
-         , ("Set-Cookie", toByteString $ WC.renderSetCookie cookie)
-         ] ""
+  case extractCookie key Nothing cookieName req of
+    Nothing -> resp $ W.responseLBS found302 [ (hLocation, "https://" <> host) ] ""
+    Just _  -> do
+        let cookie = WC.def {
+              WC.setCookieName = cookieName
+            , WC.setCookieHttpOnly = True
+            , WC.setCookiePath = Just "/"
+            , WC.setCookieSameSite = Just WC.sameSiteStrict
+            , WC.setCookieSecure = True
+            , WC.setCookieValue = "goodbye"
+            , WC.setCookieDomain = cookieDomain
+            , WC.setCookieExpires = Just . posixSecondsToUTCTime . realToFrac $ CTime 0
+            }
+        resp $ W.responseLBS found302 [
+                 (hLocation, "https://" <> host)
+               , ("Set-Cookie", toByteString $ WC.renderSetCookie cookie)
+               ] ""
 
 
 badRequest ::String -> W.Application
