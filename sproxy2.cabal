@@ -13,8 +13,13 @@ maintainer: Igor Pashev <pashev.igor@gmail.com>
 copyright: 2016, Zalora South East Asia Pte. Ltd
 category: Databases, Web
 build-type: Simple
-extra-source-files: README.md ChangeLog.md sproxy.yml.example sproxy.sql
 cabal-version: >= 1.20
+extra-source-files:
+  ChangeLog.md
+  README.md
+  datafile.yml.example
+  sproxy.sql
+  sproxy.yml.example
 
 source-repository head
   type: git
@@ -37,6 +42,7 @@ executable sproxy2
       Sproxy.Logging
       Sproxy.Server
       Sproxy.Server.DB
+      Sproxy.Server.DB.DataFile
     build-depends:
         base >= 4.8 && < 50
       , aeson

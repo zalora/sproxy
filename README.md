@@ -55,8 +55,27 @@ back-end server (if allowed).
 
 Permissions system
 ------------------
+Permissions are stored in internal SQLite3 database and imported
+from data sources, which can be a PostgreSQL database or a file.  See
+[sproxy.sql](./sproxy.sql) and [datafile.yml.example](./datafile.yml.example)
+for details.
 
-Permissions are stored in a PostgreSQL database. See sproxy.sql for details.
+Do note that Sproxy2 fetches only `group_member`, `group_privilege`
+and `privilege_rule` tables, because only these tables are used for
+authorization. The other tables in PostgreSQL schema serve for data
+integrity. Data integrity of the data file is not verfied, though import
+may fail due to primary key restrictions.
+
+Only one data source can be used. The data in internal database, if any,
+is fully overwritten by the data from a data source. If no data source is
+specified, the data in internal database remains unchanged, even between
+restarts.  Broken data source is _not_ fatal. Sproxy will keep using existing
+internal database, or create a new empty one if missed. Broken data source
+means inability to connect to PostgreSQL database, missed datafile, etc.
+
+The data from a PostgreSQL database are periodically fetched into the internal
+database, while the data file is read once at startup.
+
 Here are the main concepts:
 
 - A `group` is identified by a name. Every group has
@@ -72,14 +91,10 @@ Here are the main concepts:
   surprising, please see the following example:
 
 
-Do note that Sproxy2 fetches only `group_member`, `group_privilege` and `privilege_rule`
-tables, because only these tables are used for authorization. The other tables
-serve for data integrity.
-
 Keep in mind that:
 
-- Domains are converted into lower case (coming from PostgreSQL or HTTP requests).
-- Emails are converted into lower case (coming from PostgreSQL or OAuth2 providers).
+- Domains are converted into lower case (coming from a data source or HTTP requests).
+- Emails are converted into lower case (coming from a data source or OAuth2 providers).
 - Groups are case-sensitive and treated as is.
 - HTTP methods are *case-sensitive*.
 - HTTP query parameters are ignored when matching a request against the rules.

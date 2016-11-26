@@ -1,0 +1,34 @@
+--- # Data file. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
+
+group_member:
+  - group: "devops"
+    email: "%"
+
+  - group: "foo"
+    email: "%"
+
+
+group_privilege:
+  - group: "foo"
+    domain: "example.com"
+    privilege: "full"
+
+  - group: "devops"
+    domain: "example.com"
+    privilege: "full"
+
+
+privilege_rule:
+  - domain: "example.com"
+    privilege: "full"
+    path: "%"
+    method: "GET"
+
+  - domain: "example.com"
+    privilege: "full"
+    path: "%"
+    method: "POST"
+
+
+... # End of data file. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
+

@@ -14,17 +14,20 @@ import Control.Monad (forever, void)
 import Data.ByteString.Char8 (pack)
 import Data.Pool (Pool, createPool, withResource)
 import Data.Text (Text, toLower, unpack)
+import Data.Yaml (decodeFileEither)
 import Database.SQLite.Simple (NamedParam((:=)))
 import Text.InterpolatedString.Perl6 (q, qc)
 import qualified Database.PostgreSQL.Simple as PG
 import qualified Database.SQLite.Simple as SQLite
 
+import Sproxy.Server.DB.DataFile ( DataFile(..), GroupMember(..),
+  GroupPrivilege(..), PrivilegeRule(..) )
 import qualified Sproxy.Logging as Log
 
 
 type Database = Pool SQLite.Connection
 
-data DataSource = PostgreSQL String -- | File FilePath
+data DataSource = PostgreSQL String | File FilePath
 
 {- TODO:
  - Hash remote tables and update the local only when the remote change
@@ -77,6 +80,12 @@ userGroups db email domain path method =
      , ":method" := method -- XXX case-sensitive by RFC2616
      ]
 
+-- FIXME short-cut for https://github.com/nurpax/sqlite-simple/issues/50
+-- FIXME nextRow is the only way to execute a prepared statement
+-- FIXME with bound parameters, but we don't expect any results.
+submit :: SQLite.Statement -> IO ()
+submit st = void (SQLite.nextRow st :: IO (Maybe [Int]))
+
 
 populate :: Database -> Maybe DataSource -> IO ()
 
@@ -86,6 +95,40 @@ populate db Nothing = do
     createGroupMember c
     createGroupPrivilege c
     createPrivilegeRule c
+
+populate db (Just (File f)) = do
+  Log.info $ "db: reading " ++ show f
+  r <- decodeFileEither f
+  case r of
+    Left e   -> Log.error $ f ++ ": " ++ show e
+    Right df ->
+      withResource db $ \c -> SQLite.withTransaction c $ do
+        dropGroupMember c
+        createGroupMember c
+        SQLite.withStatement c
+          [q|INSERT INTO group_member("group", email) VALUES (?, ?)|]
+            $ \st -> mapM_ (\gm -> SQLite.withBind st
+                                  (gmGroup gm, toLower $ gmEmail gm)
+                                  (submit st)
+                          ) (groupMember df)
+
+        dropGroupPrivilege c
+        createGroupPrivilege c
+        SQLite.withStatement c
+          [q|INSERT INTO group_privilege("group", domain, privilege) VALUES (?, ?, ?)|]
+            $ \st -> mapM_ (\gp -> SQLite.withBind st
+                                  (gpGroup gp, toLower $ gpDomain gp, gpPrivilege gp)
+                                  (submit st)
+                          ) (groupPrivilege df)
+
+        dropPrivilegeRule c
+        createPrivilegeRule c
+        SQLite.withStatement c
+          [q|INSERT INTO privilege_rule(domain, privilege, path, method) VALUES (?, ?, ?, ?)|]
+            $ \st -> mapM_ (\pr -> SQLite.withBind st
+                                  (toLower $ prDomain pr, prPrivilege pr, prPath pr, prMethod pr)
+                                  (submit st)
+                          ) (privilegeRule df)
 
 -- XXX We keep only required minimum of the data, without any integrity check.
 -- XXX Integrity check should be done somewhere else, e. g. in the master PostgreSQL database,
@@ -154,7 +197,6 @@ createGroupPrivilege c = SQLite.execute_ c [q|
     PRIMARY KEY ("group", domain, privilege)
   )
 |]
-
 
 dropPrivilegeRule :: SQLite.Connection -> IO ()
 dropPrivilegeRule c = SQLite.execute_ c "DROP TABLE IF EXISTS privilege_rule"

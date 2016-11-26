@@ -27,6 +27,7 @@ data ConfigFile = ConfigFile {
 , cfListen80     :: Maybe Bool
 , cfBackends     :: [BackendConf]
 , cfOAuth2       :: HashMap Text OAuth2Conf
+, cfDataFile     :: Maybe FilePath
 , cfDatabase     :: Maybe String
 , cfPgPassFile   :: Maybe FilePath
 , cfHTTP2        :: Bool
@@ -45,6 +46,7 @@ instance FromJSON ConfigFile where
     <*> m .:? "listen80"
     <*> m .:  "backends"
     <*> m .:  "oauth2"
+    <*> m .:? "datafile"
     <*> m .:? "database"
     <*> m .:? "pgpassfile"
     <*> m .:? "http2"          .!= True

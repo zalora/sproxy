@@ -1,8 +1,13 @@
 --- # Sproxy configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
 
+# Logging level: debug, info, warn, error.
+# Optional. Default is debug.
+#
+# log_level: debug
+
 # The port Sproxy listens on (HTTPS).
 # Optional. Default is 443.
-# 
+#
 # listen: 443
 
 # Listen on port 80 and redirect HTTP requests to HTTPS.
@@ -24,35 +29,6 @@
 #
 # home: "."
 
-# PostgreSQL database connection string.
-# Optional. If specified, sproxy will periodically pull the data from this
-# database into internal SQLite3 database. Define password in a file
-# referenced by the PGPASSFILE environment variable. Or use the "pgpassfile" option.
-# Example:
-# database: "user=sproxy-readonly dbname=sproxy port=6001"
-#
-# database:
-
-# PostgreSQL password file.
-# Optional. If specified, sproxy will set PGPASSFILE environment variable pointing to this file
-# Example:
-# pgpassfile: /run/keys/sproxy.pgpass
-#
-# pgpassfile:
-
-# Logging level: debug, info, warn, error.
-# Optional. Default is debug.
-# 
-# log_level: debug
-
-# A file with arbitrary content used to sign sproxy cookie and other things (secret!).
-# Optional. If not specified, a random key is generated on startup, and
-# as a consequence, restaring sproxy will invalidate existing user sessions.
-# This option could be useful for load-balancing with multiple sproxy instances,
-# when all instances must understand cookies created by each other.
-# This should not be very large, a few random bytes are fine.
-# 
-# key: /run/keys/sproxy.secret
 
 # File with SSL certificate. Required.
 # It can be a bundle with the server certificate coming first:
@@ -70,8 +46,46 @@ ssl_key: /path/key.pem
 # ssl_cert_chain:
 #   - /path/foo.pem
 #   - /path/bar.pem
-# 
+#
 # ssl_cert_chain: []
+
+
+# PostgreSQL database connection string.
+# Optional. If specified, sproxy will periodically pull the data from this
+# database into internal SQLite3 database. Define password in a file
+# referenced by the PGPASSFILE environment variable. Or use the "pgpassfile" option.
+# Cannot be used with the "datafile" option.
+# Example:
+# database: "user=sproxy-readonly dbname=sproxy port=6001"
+#
+# database:
+
+# PostgreSQL password file.
+# Optional. If specified, sproxy will set PGPASSFILE environment variable pointing to this file
+# Example:
+# pgpassfile: /run/keys/sproxy.pgpass
+#
+# pgpassfile:
+
+
+# YAML file used to fill internal SQLite3 database.
+# Optional. If specified, Sproxy will import it on start overwriting
+# and existing data in the internal database.
+# Useful for development or some simple deployments.
+# Cannot be used with the "database" option.
+# For example see the datafile.yml.example
+#
+# datafile: /path/data.yml
+
+
+# A file with arbitrary content used to sign sproxy cookie and other things (secret!).
+# Optional. If not specified, a random key is generated on startup, and
+# as a consequence, restaring sproxy will invalidate existing user sessions.
+# This option could be useful for load-balancing with multiple sproxy instances,
+# when all instances must understand cookies created by each other.
+# This should not be very large, a few random bytes are fine.
+# 
+# key: /run/keys/sproxy.secret
 
 
 # Credentials for supported OAuth2 providers.

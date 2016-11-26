@@ -67,13 +67,8 @@ server configFile = do
     setGroupID $ userGroupID u
     setUserID $ userID u
 
-  case cfPgPassFile cf of
-    Nothing -> return ()
-    Just f  -> do
-      Log.info $ "pgpassfile: " ++ show f
-      setEnv "PGPASSFILE" f
-
-  db <- DB.start (cfHome cf) (newDataSource cf)
+  ds <- newDataSource cf
+  db <- DB.start (cfHome cf) ds
 
   key <- maybe
            (Log.info "using new random key" >> getEntropy 32)
@@ -112,11 +107,23 @@ server configFile = do
     (sproxy key db oauth2clients backends)
 
 
-newDataSource :: ConfigFile -> Maybe DB.DataSource
+newDataSource :: ConfigFile -> IO (Maybe DB.DataSource)
 newDataSource cf =
-  case cfDatabase cf of
-    Just str -> Just $ DB.PostgreSQL str
-    Nothing -> Nothing
+  case (cfDataFile cf, cfDatabase cf) of
+    (Nothing, Just str) -> do
+      case cfPgPassFile cf of
+        Nothing -> return ()
+        Just f  -> do
+          Log.info $ "pgpassfile: " ++ show f
+          setEnv "PGPASSFILE" f
+      return . Just $ DB.PostgreSQL str
+
+    (Just f, Nothing)   -> return . Just $ DB.File f
+
+    (Nothing, Nothing)  -> return Nothing
+    _ -> do
+      Log.error "only one data source can be used"
+      exitFailure
 
 
 newOAuth2Client :: (Text, OAuth2Conf) -> IO (Text, OAuth2Client)
