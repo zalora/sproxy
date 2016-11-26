@@ -194,13 +194,6 @@ Use [cabal-install](http://www.haskell.org/haskellwiki/Cabal-Install)
 to fetch and build all pre-requisites automatically.
 
 
-Installation
-============
-    $ git clone https://github.com/zalora/sproxy2.git
-    $ cd sproxy2
-    $ cabal install
-
-
 Configuration
 =============
 
