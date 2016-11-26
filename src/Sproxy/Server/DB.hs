@@ -80,12 +80,6 @@ userGroups db email domain path method =
      , ":method" := method -- XXX case-sensitive by RFC2616
      ]
 
--- FIXME short-cut for https://github.com/nurpax/sqlite-simple/issues/50
--- FIXME nextRow is the only way to execute a prepared statement
--- FIXME with bound parameters, but we don't expect any results.
-submit :: SQLite.Statement -> IO ()
-submit st = void (SQLite.nextRow st :: IO (Maybe [Int]))
-
 
 populate :: Database -> Maybe DataSource -> IO ()
 
@@ -103,36 +97,19 @@ populate db (Just (File f)) = do
     Left e   -> Log.error $ f ++ ": " ++ show e
     Right df ->
       withResource db $ \c -> SQLite.withTransaction c $ do
-        dropGroupMember c
-        createGroupMember c
-        SQLite.withStatement c
-          [q|INSERT INTO group_member("group", email) VALUES (?, ?)|]
-            $ \st -> mapM_ (\gm -> SQLite.withBind st
-                                  (gmGroup gm, toLower $ gmEmail gm)
-                                  (submit st)
-                          ) (groupMember df)
+        refreshGroupMembers c $ \st ->
+          mapM_ (\gm -> submit st (gmGroup gm, toLower $ gmEmail gm)
+                ) (groupMember df)
 
-        dropGroupPrivilege c
-        createGroupPrivilege c
-        SQLite.withStatement c
-          [q|INSERT INTO group_privilege("group", domain, privilege) VALUES (?, ?, ?)|]
-            $ \st -> mapM_ (\gp -> SQLite.withBind st
-                                  (gpGroup gp, toLower $ gpDomain gp, gpPrivilege gp)
-                                  (submit st)
-                          ) (groupPrivilege df)
+        refreshGroupPrivileges c $ \st ->
+          mapM_ (\gp -> submit st (gpGroup gp, toLower $ gpDomain gp, gpPrivilege gp)
+                ) (groupPrivilege df)
 
-        dropPrivilegeRule c
-        createPrivilegeRule c
-        SQLite.withStatement c
-          [q|INSERT INTO privilege_rule(domain, privilege, path, method) VALUES (?, ?, ?, ?)|]
-            $ \st -> mapM_ (\pr -> SQLite.withBind st
-                                  (toLower $ prDomain pr, prPrivilege pr, prPath pr, prMethod pr)
-                                  (submit st)
-                          ) (privilegeRule df)
+        refreshPrivilegeRule c $ \st ->
+          mapM_ (\pr -> submit st (toLower $ prDomain pr, prPrivilege pr, prPath pr, prMethod pr)
+                ) (privilegeRule df)
 
--- XXX We keep only required minimum of the data, without any integrity check.
--- XXX Integrity check should be done somewhere else, e. g. in the master PostgreSQL database,
--- XXX or during importing the config file.
+
 populate db (Just (PostgreSQL connstr)) =
   void . forkIO . forever . flip finally (7 `minutes` threadDelay)
   . logException $ do
@@ -142,38 +119,33 @@ populate db (Just (PostgreSQL connstr)) =
         \pg -> PG.withTransaction pg $ do
 
           Log.info "db: syncing group_member"
-          dropGroupMember c
-          createGroupMember c
-          PG.forEach_ pg
-            [q|SELECT "group", lower(email) FROM group_member|] $ \r ->
-              SQLite.execute c
-                [q|INSERT INTO group_member("group", email) VALUES (?, ?)|]
-                  (r :: (Text, Text))
+          refreshGroupMembers c $ \st ->
+            PG.forEach_ pg
+              [q|SELECT "group", lower(email) FROM group_member|] $ \r ->
+                submit st (r :: (Text, Text))
           count c "group_member"
 
           Log.info "db: syncing group_privilege"
-          dropGroupPrivilege c
-          createGroupPrivilege c
-          PG.forEach_ pg
-            [q|SELECT "group", lower(domain), privilege FROM group_privilege|] $ \r ->
-              SQLite.execute c
-                [q|INSERT INTO group_privilege("group", domain, privilege) VALUES (?, ?, ?)|]
-                  (r :: (Text, Text, Text))
+          refreshGroupPrivileges c $ \st ->
+            PG.forEach_ pg
+              [q|SELECT "group", lower(domain), privilege FROM group_privilege|] $ \r ->
+                submit st (r :: (Text, Text, Text))
           count c "group_privilege"
 
           Log.info "db: syncing privilege_rule"
-          dropPrivilegeRule c
-          createPrivilegeRule c
-          PG.forEach_ pg
-            [q|SELECT lower(domain), privilege, path, method FROM privilege_rule|] $ \r ->
-              SQLite.execute c
-                [q|INSERT INTO privilege_rule(domain, privilege, path, method) VALUES (?, ?, ?, ?)|]
-                  (r :: (Text, Text, Text, Text))
+          refreshPrivilegeRule c $ \st ->
+            PG.forEach_ pg
+              [q|SELECT lower(domain), privilege, path, method FROM privilege_rule|] $ \r ->
+                submit st (r :: (Text, Text, Text, Text))
           count c "privilege_rule"
 
 
-dropGroupMember :: SQLite.Connection -> IO ()
-dropGroupMember c = SQLite.execute_ c "DROP TABLE IF EXISTS group_member"
+-- FIXME short-cut for https://github.com/nurpax/sqlite-simple/issues/50
+-- FIXME nextRow is the only way to execute a prepared statement
+-- FIXME with bound parameters, but we don't expect any results.
+submit :: SQLite.ToRow values => SQLite.Statement -> values -> IO ()
+submit st v = SQLite.withBind st v $ void (SQLite.nextRow st :: IO (Maybe [Int]))
+
 
 createGroupMember :: SQLite.Connection -> IO ()
 createGroupMember c = SQLite.execute_ c [q|
@@ -184,9 +156,14 @@ createGroupMember c = SQLite.execute_ c [q|
   )
 |]
 
+refreshGroupMembers :: SQLite.Connection -> (SQLite.Statement -> IO ()) -> IO ()
+refreshGroupMembers c a = do
+  SQLite.execute_ c "DROP TABLE IF EXISTS group_member"
+  createGroupMember c
+  SQLite.withStatement c
+    [q|INSERT INTO group_member("group", email) VALUES (?, ?)|]
+    a
 
-dropGroupPrivilege :: SQLite.Connection -> IO ()
-dropGroupPrivilege c = SQLite.execute_ c "DROP TABLE IF EXISTS group_privilege"
 
 createGroupPrivilege :: SQLite.Connection -> IO ()
 createGroupPrivilege c = SQLite.execute_ c [q|
@@ -198,8 +175,14 @@ createGroupPrivilege c = SQLite.execute_ c [q|
   )
 |]
 
-dropPrivilegeRule :: SQLite.Connection -> IO ()
-dropPrivilegeRule c = SQLite.execute_ c "DROP TABLE IF EXISTS privilege_rule"
+refreshGroupPrivileges :: SQLite.Connection -> (SQLite.Statement -> IO ()) -> IO ()
+refreshGroupPrivileges c a = do
+  SQLite.execute_ c "DROP TABLE IF EXISTS group_privilege"
+  createGroupPrivilege c
+  SQLite.withStatement c
+    [q|INSERT INTO group_privilege("group", domain, privilege) VALUES (?, ?, ?)|]
+    a
+
 
 createPrivilegeRule :: SQLite.Connection -> IO ()
 createPrivilegeRule c = SQLite.execute_ c [q|
@@ -211,6 +194,14 @@ createPrivilegeRule c = SQLite.execute_ c [q|
     PRIMARY KEY (domain, path, method)
   )
 |]
+
+refreshPrivilegeRule :: SQLite.Connection -> (SQLite.Statement -> IO ()) -> IO ()
+refreshPrivilegeRule c a = do
+  SQLite.execute_ c "DROP TABLE IF EXISTS privilege_rule"
+  createPrivilegeRule c
+  SQLite.withStatement c
+    [q|INSERT INTO privilege_rule(domain, privilege, path, method) VALUES (?, ?, ?, ?)|]
+    a
 
 
 count :: SQLite.Connection -> String -> IO ()
