@@ -1,5 +1,14 @@
 For differences with the original Sproxy scroll down.
 
+1.91.0
+======
+
+  * In addition to good old PostgreSQL data source, made it possible
+    to import permission data from a YAML file. This means that Sproxy2
+    can work without any PostgreSQL database, just using file-only configuration.
+    Useful for development or trivial deployments. Added new `datafile` option
+    in configuration file.
+
 
 1.90.2
 ======
