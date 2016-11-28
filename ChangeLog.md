@@ -1,5 +1,18 @@
 For differences with the original Sproxy scroll down.
 
+1.92.0
+======
+
+  * Allow running in plain HTTP mode (no SSL). Useful when Sproxy is behind some
+    other proxy or load-balancer. Added two more options: `ssl` (defaults to true)
+    and `https_port` (defaults to like `listen`). Options `ssl_key` and `ssl_cert`
+    are required only if `ssl == true`. SSL-terminations is still required at upstream
+    proxies, because the cookie is set for HTTPS only.
+
+  * Added "user" table into `sproxy.sql`. No action is required, but PostgreSQL database
+    built after this file will be incompatible with Sproxy Web ( <= 0.4.1 at least).
+
+
 1.91.0
 ======
 
