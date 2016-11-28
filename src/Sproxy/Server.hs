@@ -75,12 +75,18 @@ server configFile = do
            (\f -> Log.info ("reading key from " ++ f) >> BS.readFile f)
            (cfKey cf)
 
+  let
+    settings =
+      (if cfHTTP2 cf then id else setHTTP2Disabled) $
+      setOnException (\_ _ -> return ())
+      defaultSettings
+
   case maybe80 of
     Nothing     -> return ()
     Just sock80 -> do
       Log.info "listening on port 80 (HTTP redirect)"
       listen sock80 maxListenQueue
-      void . forkIO $ runSettingsSocket defaultSettings sock80 (redirect $ cfListen cf)
+      void . forkIO $ runSettingsSocket settings sock80 (redirect $ cfListen cf)
 
   oauth2clients <- HM.fromList <$> mapM newOAuth2Client (HM.toList (cfOAuth2 cf))
 
@@ -89,12 +95,6 @@ server configFile = do
       m <- newBackendManager be
       return (compile $ beName be, be, m)
     ) $ cfBackends cf
-
-  let
-    settings =
-      (if cfHTTP2 cf then id else setHTTP2Disabled) $
-      setOnException (\_ _ -> return ())
-      defaultSettings
 
   -- XXX 2048 is from bindPortTCP from streaming-commons used internally by runTLS.
   -- XXX Since we don't call runTLS, we listen socket here with the same options.
