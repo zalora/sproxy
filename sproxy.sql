@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS "group" (
   "comment" TEXT
 );
 
+CREATE TABLE IF NOT EXISTS "user" (
+  "email" TEXT NOT NULL PRIMARY KEY,
+  "comment" TEXT
+);
+
 -- | group        |
 -- |--------------|
 -- | data science |
@@ -40,18 +45,18 @@ CREATE TABLE IF NOT EXISTS "group" (
 
 CREATE TABLE IF NOT EXISTS group_member (
   "group" TEXT REFERENCES "group" ("group") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
-  email TEXT NOT NULL,
+  "email" TEXT REFERENCES "user" ("email") ON UPDATE CASCADE ON DELETE CASCADE NOT NULL,
   "comment" TEXT,
   PRIMARY KEY ("group", email)
 );
 
 -- | group        | email                  |
 -- |--------------+------------------------|
--- | data science | blah@example.com        |
--- | data science | foo@example.com         |
--- | devops       | devops1@example.com     |
--- | devops       | devops2@example.com     |
--- | all          | %@example.com           |
+-- | data science | blah@example.com       |
+-- | data science | foo@example.com        |
+-- | devops       | devops1@example.com    |
+-- | devops       | devops2@example.com    |
+-- | all          | %@example.com          |
 
 -- Find out which groups a user (email address) belongs to:
 -- SELECT "group" FROM group_member WHERE 'email.address' LIKE email
