@@ -17,14 +17,16 @@ import Sproxy.Logging (LogLevel(Debug))
 
 data ConfigFile = ConfigFile {
   cfListen       :: Word16
+, cfSsl          :: Bool
 , cfUser         :: String
 , cfHome         :: FilePath
 , cfLogLevel     :: LogLevel
-, cfSslCert      :: FilePath
-, cfSslKey       :: FilePath
+, cfSslCert      :: Maybe FilePath
+, cfSslKey       :: Maybe FilePath
 , cfSslCertChain :: [FilePath]
 , cfKey          :: Maybe FilePath
 , cfListen80     :: Maybe Bool
+, cfHttpsPort    :: Maybe Word16
 , cfBackends     :: [BackendConf]
 , cfOAuth2       :: HashMap Text OAuth2Conf
 , cfDataFile     :: Maybe FilePath
@@ -36,14 +38,16 @@ data ConfigFile = ConfigFile {
 instance FromJSON ConfigFile where
   parseJSON (Object m) = ConfigFile <$>
         m .:? "listen"         .!= 443
+    <*> m .:? "ssl"            .!= True
     <*> m .:? "user"           .!= "sproxy"
     <*> m .:? "home"           .!= "."
     <*> m .:? "log_level"      .!= Debug
-    <*> m .:  "ssl_cert"
-    <*> m .:  "ssl_key"
+    <*> m .:? "ssl_cert"
+    <*> m .:? "ssl_key"
     <*> m .:? "ssl_cert_chain" .!= []
     <*> m .:? "key"
     <*> m .:? "listen80"
+    <*> m .:? "https_port"
     <*> m .:  "backends"
     <*> m .:  "oauth2"
     <*> m .:? "datafile"

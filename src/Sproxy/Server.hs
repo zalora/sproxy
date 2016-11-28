@@ -14,11 +14,12 @@ import Data.Word (Word16)
 import Data.Yaml (decodeFileEither)
 import Network.HTTP.Client (Manager, ManagerSettings(..), defaultManagerSettings, newManager, socketConnection)
 import Network.HTTP.Client.Internal (Connection)
-import Network.Socket ( Family(AF_INET, AF_UNIX), SockAddr(SockAddrInet, SockAddrUnix),
+import Network.Socket ( Socket, Family(AF_INET, AF_UNIX), SockAddr(SockAddrInet, SockAddrUnix),
   SocketOption(ReuseAddr), SocketType(Stream), bind, close, connect, inet_addr,
   listen, maxListenQueue, setSocketOption, socket )
+import Network.Wai (Application)
 import Network.Wai.Handler.WarpTLS (tlsSettingsChain, runTLSSocket)
-import Network.Wai.Handler.Warp ( defaultSettings, runSettingsSocket,
+import Network.Wai.Handler.Warp ( Settings, defaultSettings, runSettingsSocket,
   setHTTP2Disabled, setOnException )
 import System.Entropy (getEntropy)
 import System.Environment (setEnv)
@@ -36,6 +37,11 @@ import qualified Sproxy.Application.OAuth2 as OAuth2
 import qualified Sproxy.Logging as Log
 import qualified Sproxy.Server.DB as DB
 
+
+{- TODO:
+ - Log.error && exitFailure should be replaced
+ - by Log.fatal && wait for logger thread to print && exitFailure
+-}
 
 server :: FilePath -> IO ()
 server configFile = do
@@ -81,13 +87,6 @@ server configFile = do
       setOnException (\_ _ -> return ())
       defaultSettings
 
-  case maybe80 of
-    Nothing     -> return ()
-    Just sock80 -> do
-      Log.info "listening on port 80 (HTTP redirect)"
-      listen sock80 maxListenQueue
-      void . forkIO $ runSettingsSocket settings sock80 (redirect $ cfListen cf)
-
   oauth2clients <- HM.fromList <$> mapM newOAuth2Client (HM.toList (cfOAuth2 cf))
 
   backends <-
@@ -96,15 +95,22 @@ server configFile = do
       return (compile $ beName be, be, m)
     ) $ cfBackends cf
 
+
+  warpServer <- newServer cf
+
+  case maybe80 of
+    Nothing     -> return ()
+    Just sock80 -> do
+      let httpsPort = fromMaybe (cfListen cf) (cfHttpsPort cf)
+      Log.info "listening on port 80 (HTTP redirect)"
+      listen sock80 maxListenQueue
+      void . forkIO $ runSettingsSocket settings sock80 (redirect httpsPort)
+
   -- XXX 2048 is from bindPortTCP from streaming-commons used internally by runTLS.
   -- XXX Since we don't call runTLS, we listen socket here with the same options.
-  Log.info $ "listening on port " ++ show (cfListen cf) ++ " (HTTPS)"
+  Log.info $ "proxy listening on port " ++ show (cfListen cf)
   listen sock (max 2048 maxListenQueue)
-  runTLSSocket
-    (tlsSettingsChain (cfSslCert cf) (cfSslCertChain cf) (cfSslKey cf))
-    settings
-    sock
-    (sproxy key db oauth2clients backends)
+  warpServer settings sock (sproxy key db oauth2clients backends)
 
 
 newDataSource :: ConfigFile -> IO (Maybe DB.DataSource)
@@ -165,6 +171,19 @@ newBackendManager be = do
     managerRawConnection = return $ \_ _ _ -> openConn
   , managerConnCount = beConnCount be
   }
+
+
+newServer :: ConfigFile -> IO (Settings -> Socket -> Application -> IO ())
+newServer cf
+  | cfSsl cf =
+    case (cfSslKey cf, cfSslCert cf) of
+      (Just k, Just c) ->
+        return $ runTLSSocket (tlsSettingsChain c (cfSslCertChain cf) k)
+      _ -> do Log.error "missings SSL certificate"
+              exitFailure
+  | otherwise = do
+      Log.warn "not using SSL!"
+      return runSettingsSocket
 
 
 openUnixSocketConnection :: FilePath -> IO Connection

@@ -10,12 +10,35 @@
 #
 # listen: 443
 
-# Listen on port 80 and redirect HTTP requests to HTTPS.
-# Optional. Default is true when listen == 443, otherwise false.
+# Whether SSL is used on port defined by `listen`.
+# You should only set it to false iff you intent to do SSL-termination
+# somewhere else, e. g. at a load-balancer in a local network.
+# If true, you also have to specify `ssl_key` and `ssl_cert`.
+# Note that there is no way Sproxy can be usable without HTTPS/SSL at the user side,
+# because Sproxy sets cookie for HTTPS only.
+# Optional. Default is true.
+# ssl: true
+
+# Listen on port 80 and redirect HTTP requests to HTTPS (see `https_port`).
+# Optional. Default is true when `listen` == 443, otherwise false.
 #
 # listen80: true
 
-# Whether HTTP2 is enabled. Optional. Default is "true"
+# Port used in redirection of HTTP requests to HTTPS.
+# I. e., http://example.com -> https://example.com[:https_port],
+# If `http_port` == 443, the port part if omitted.
+# This is useful when behind a dump proxy or load-balancer, like Amazon ELB,
+# (and`ssl` == false). It's unlikely that something other than 443
+# is exposed to users, but if you are behind a proxy
+# you can't really know the correct https port.
+# Optional. Default is as `listen`.
+#
+# Example:
+# https_port: 4040
+#
+# https_port:
+
+# Whether HTTP2 is enabled. Optional. Default is true.
 #
 # http2: true
 
@@ -30,14 +53,14 @@
 # home: "."
 
 
-# File with SSL certificate. Required.
+# File with SSL certificate. Required if `ssl` == true.
 # It can be a bundle with the server certificate coming first:
 # cat me-cert.pem CA-cert.pem > cert.pem
 # Once again: most wanted certs go first ;-)
 # Or you can opt in using of `ssl_cert_chain`
 ssl_cert: /path/cert.pem
 
-# File with SSL key (secret!). Required.
+# File with SSL key (secret!). Required if `ssl` = true.
 ssl_key: /path/key.pem
 
 # Chain SSL certificate files.
@@ -53,8 +76,8 @@ ssl_key: /path/key.pem
 # PostgreSQL database connection string.
 # Optional. If specified, sproxy will periodically pull the data from this
 # database into internal SQLite3 database. Define password in a file
-# referenced by the PGPASSFILE environment variable. Or use the "pgpassfile" option.
-# Cannot be used with the "datafile" option.
+# referenced by the PGPASSFILE environment variable. Or use the `pgpassfile` option.
+# Cannot be used with the `datafile` option.
 # Example:
 # database: "user=sproxy-readonly dbname=sproxy port=6001"
 #
@@ -72,7 +95,7 @@ ssl_key: /path/key.pem
 # Optional. If specified, Sproxy will import it on start overwriting
 # and existing data in the internal database.
 # Useful for development or some simple deployments.
-# Cannot be used with the "database" option.
+# Cannot be used with the `database` option.
 # For example see the datafile.yml.example
 #
 # datafile: /path/data.yml
