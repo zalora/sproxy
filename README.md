@@ -91,17 +91,6 @@ Here are the main concepts:
   surprising, please see the following example:
 
 
-Keep in mind that:
-
-- Domains are converted into lower case (coming from a data source or HTTP requests).
-- Emails are converted into lower case (coming from a data source or OAuth2 providers).
-- Groups are case-sensitive and treated as is.
-- HTTP methods are *case-sensitive*.
-- HTTP query parameters are ignored when matching a request against the rules.
-- Privileges are case-sensitive and treated as is.
-- SQL wildcards (`_` and `%`) are supported for emails, domains, paths.
-
-
 Privileges example
 ------------------
 
@@ -136,6 +125,17 @@ matching path pattern is `/admin/%` and only `administrator`s have the `admin`
 privilege.
 
 Likewise `readers` have no access to e.g. `/wiki/edit/delete_everything.php`.
+
+
+Keep in mind that:
+
+- Domains are converted into lower case (coming from a data source or HTTP requests).
+- Emails are converted into lower case (coming from a data source or OAuth2 providers).
+- Groups are case-sensitive and treated as is.
+- HTTP methods are *case-sensitive*.
+- HTTP query parameters are ignored when matching a request against the rules.
+- Privileges are case-sensitive and treated as is.
+- SQL wildcards (`_` and `%`) are supported for emails, domains, paths.
 
 
 HTTP headers passed to the back-end server
