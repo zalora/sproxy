@@ -1,5 +1,7 @@
 --- # Sproxy configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
 
+# NOTE: You can use the !include directive to import parts of this file.
+
 # Logging level: debug, info, warn, error.
 # Optional. Default is debug.
 #
@@ -101,34 +103,32 @@ ssl_key: /path/key.pem
 # datafile: /path/data.yml
 
 
-# A file with arbitrary content used to sign sproxy cookie and other things (secret!).
+# Arbitrary string used to sign sproxy cookie and other things (secret!).
 # Optional. If not specified, a random key is generated on startup, and
 # as a consequence, restaring sproxy will invalidate existing user sessions.
 # This option could be useful for load-balancing with multiple sproxy instances,
 # when all instances must understand cookies created by each other.
 # This should not be very large, a few random bytes are fine.
 # 
-# key: /run/keys/sproxy.secret
+# key: !include /run/keys/sproxy.secret
 
 
 # Credentials for supported OAuth2 providers.
 # Currently supported: "google", "linkedin"
 # At least one provider is required.
 # Attributes:
-#   client_id     - OAuth2 client ID (string)
-#   client_secret - OAuth2 client secret. Regardless of its name, this is a file.
-#                   The secret is read from the file which you should keep secret.
-#                   Only the first line of this file is read.
+#   client_id     - OAuth2 client ID.
+#   client_secret - OAuth2 client secret.
 #
 # Example:
 # oauth2:
 #   google:
 #     client_id: "XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com"
-#     client_secret: "/run/keys/XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com"
+#     client_secret: !include /run/keys/XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com
 #
 #   linkedin:
 #     client_id: "xxxxxxxxxxxxxx"
-#     client_secret: "/run/keys/xxxxxxxxxxxxxx"
+#     client_secret: !include "/run/keys/xxxxxxxxxxxxxx"
 #
 #
 # oauth2:

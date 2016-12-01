@@ -5,13 +5,12 @@ module Sproxy.Server (
 import Control.Concurrent (forkIO)
 import Control.Exception (bracketOnError)
 import Control.Monad (void, when)
-import Data.ByteString as BS (hGetLine, readFile)
 import Data.ByteString.Char8 (pack)
 import Data.HashMap.Strict as HM (fromList, lookup, toList)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Word (Word16)
-import Data.Yaml (decodeFileEither)
+import Data.Yaml.Include (decodeFileEither)
 import Network.HTTP.Client (Manager, ManagerSettings(..), defaultManagerSettings, newManager, socketConnection)
 import Network.HTTP.Client.Internal (Connection)
 import Network.Socket ( Socket, Family(AF_INET, AF_UNIX), SockAddr(SockAddrInet, SockAddrUnix),
@@ -25,7 +24,7 @@ import System.Entropy (getEntropy)
 import System.Environment (setEnv)
 import System.Exit (exitFailure)
 import System.FilePath.Glob (compile)
-import System.IO (IOMode(ReadMode), hIsEOF, hPutStrLn, stderr, withFile)
+import System.IO (hPutStrLn, stderr)
 import System.Posix.User ( GroupEntry(..), UserEntry(..),
   getAllGroupEntries, getRealUserID,
   getUserEntryForName, setGroupID, setGroups, setUserID )
@@ -47,7 +46,6 @@ server :: FilePath -> IO ()
 server configFile = do
   cf <- readConfigFile configFile
   Log.start $ cfLogLevel cf
-  Log.debug $ show cf
 
   sock <- socket AF_INET Stream 0
   setSocketOption sock ReuseAddr 1
@@ -78,7 +76,7 @@ server configFile = do
 
   key <- maybe
            (Log.info "using new random key" >> getEntropy 32)
-           (\f -> Log.info ("reading key from " ++ f) >> BS.readFile f)
+           (return . pack)
            (cfKey cf)
 
   let
@@ -139,16 +137,9 @@ newOAuth2Client (name, cfg) =
                   exitFailure
     Just provider -> do
       Log.info $ "oauth2: adding " ++ show name
-      client_secret <- withFile secret_file ReadMode $ \h -> do
-        empty <- hIsEOF h
-        if empty then do
-          Log.error $ "oauth2: empty secret file for "
-                    ++ show name ++ ": " ++ show secret_file
-          return $ pack ""
-        else BS.hGetLine h
-      return (name, provider (pack client_id, client_secret))
-  where client_id = oa2ClientId cfg
-        secret_file = oa2ClientSecret cfg
+      return (name, provider (client_id, client_secret))
+  where client_id = pack $ oa2ClientId cfg
+        client_secret = pack $ oa2ClientSecret cfg
 
 
 newBackendManager :: BackendConf -> IO Manager

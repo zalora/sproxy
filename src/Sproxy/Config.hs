@@ -24,7 +24,7 @@ data ConfigFile = ConfigFile {
 , cfSslCert      :: Maybe FilePath
 , cfSslKey       :: Maybe FilePath
 , cfSslCertChain :: [FilePath]
-, cfKey          :: Maybe FilePath
+, cfKey          :: Maybe String
 , cfListen80     :: Maybe Bool
 , cfHttpsPort    :: Maybe Word16
 , cfBackends     :: [BackendConf]
@@ -83,7 +83,7 @@ instance FromJSON BackendConf where
 
 data OAuth2Conf = OAuth2Conf {
   oa2ClientId     :: String
-, oa2ClientSecret :: FilePath
+, oa2ClientSecret :: String
 } deriving (Show)
 
 instance FromJSON OAuth2Conf where
