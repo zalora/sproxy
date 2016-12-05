@@ -198,7 +198,7 @@ Configuration
 =============
 
 By default `sproxy2` will read its configuration from `sproxy.yml`.  There is
-example file with documentation [sproxy.yml.example](sproxy.yml.example). You
+example file with documentation [sproxy.example.yml](sproxy.example.yml). You
 can specify a custom path with:
 
 ```

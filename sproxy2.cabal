@@ -18,8 +18,8 @@ extra-source-files:
   ChangeLog.md
   README.md
   datafile.yml.example
+  sproxy.example.yml
   sproxy.sql
-  sproxy.yml.example
 
 source-repository head
   type: git
