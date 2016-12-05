@@ -57,7 +57,7 @@ Permissions system
 ------------------
 Permissions are stored in internal SQLite3 database and imported
 from data sources, which can be a PostgreSQL database or a file.  See
-[sproxy.sql](./sproxy.sql) and [datafile.yml.example](./datafile.yml.example)
+[sproxy.sql](./sproxy.sql) and [datafile.example.yml](./datafile.example.yml)
 for details.
 
 Do note that Sproxy2 fetches only `group_member`, `group_privilege`

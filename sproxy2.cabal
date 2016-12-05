@@ -17,7 +17,7 @@ cabal-version: >= 1.20
 extra-source-files:
   ChangeLog.md
   README.md
-  datafile.yml.example
+  datafile.example.yml
   sproxy.example.yml
   sproxy.sql
 
