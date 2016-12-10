@@ -1,5 +1,3 @@
---- # Sproxy configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
-
 # NOTE: You can use the !include directive to import parts of this file.
 
 # Logging level: debug, info, warn, error.
@@ -171,6 +169,4 @@ ssl_key: /path/key.pem
 #
 backends:
   - port: 8080
-
-... # End of configuration. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
 

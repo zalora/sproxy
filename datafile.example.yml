@@ -1,5 +1,3 @@
---- # Data file. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
-
 group_member:
   - group: "devops"
     email: "%"
@@ -28,7 +26,4 @@ privilege_rule:
     privilege: "full"
     path: "%"
     method: "POST"
-
-
-... # End of data file. Don't remove this line. This is YAML: https://en.wikipedia.org/wiki/YAML
 
