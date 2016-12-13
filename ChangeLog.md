@@ -1,5 +1,16 @@
 For differences with the original Sproxy scroll down.
 
+1.93.0
+======
+
+  * BREAKING: Allow `!include` in config file.
+    This changes semantics of options `key` and `oauth2.<provider>.client_secret`.
+    They are no longer files, but strings.  To read content from files, use
+    !include.  The point of being files or read from files is to segregate secrets
+    from non-sensitive easily discoverable settings.  With `!include` it is much more
+    simple and flexible.
+
+
 1.92.0
 ======
 
