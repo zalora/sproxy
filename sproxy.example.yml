@@ -26,7 +26,7 @@
 
 # Port used in redirection of HTTP requests to HTTPS.
 # I. e., http://example.com -> https://example.com[:https_port],
-# If `http_port` == 443, the port part if omitted.
+# If `https_port` == 443, the port part if omitted.
 # This is useful when behind a dumb proxy or load-balancer, like Amazon ELB,
 # (and`ssl` == false). It's unlikely that something other than 443
 # is exposed to users, but if you are behind a proxy
