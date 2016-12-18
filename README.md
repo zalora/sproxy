@@ -135,7 +135,7 @@ Keep in mind that:
 - HTTP methods are *case-sensitive*.
 - HTTP query parameters are ignored when matching a request against the rules.
 - Privileges are case-sensitive and treated as is.
-- SQL wildcards (`_` and `%`) are supported for emails, domains, paths.
+- SQL wildcards (`_` and `%`) are supported for emails, paths (this _will_ change in future versions).
 
 
 HTTP headers passed to the back-end server

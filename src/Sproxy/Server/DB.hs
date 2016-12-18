@@ -66,10 +66,10 @@ userGroups db email domain path method =
   withResource db $ \c -> fmap SQLite.fromOnly <$> SQLite.queryNamed c [q|
       SELECT gm."group" FROM group_privilege gp JOIN group_member gm ON gm."group"  = gp."group"
       WHERE :email LIKE gm.email
-      AND :domain LIKE gp.domain
+      AND gp.domain = :domain
       AND gp.privilege IN (
         SELECT privilege FROM privilege_rule
-        WHERE :domain LIKE domain
+        WHERE domain = domain
         AND :path LIKE path
         AND method = :method
         ORDER BY length(path) - length(replace(path, '/', '')) DESC LIMIT 1
