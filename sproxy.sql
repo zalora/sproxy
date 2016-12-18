@@ -166,7 +166,10 @@ CREATE TABLE IF NOT EXISTS group_privilege (
   INSERT INTO group_member ("group", email) VALUES ('dev', '%');
   INSERT INTO privilege (domain, privilege) VALUES ('example.com', 'full');
   INSERT INTO group_privilege ("group", domain, privilege) VALUES ('dev', 'example.com', 'full');
-  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', '%');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', 'GET');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', 'HEAD');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', 'POST');
+  INSERT INTO privilege_rule (domain, privilege, path, method) VALUES ('example.com', 'full', '%', 'PUT');
 */
 
 END;
