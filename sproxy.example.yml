@@ -8,7 +8,10 @@
 # The port Sproxy listens on (HTTPS).
 # Optional. Default is 443.
 #
-# listen: 443
+# Example:
+# listen: 8443
+#
+# listen:
 
 # Whether SSL is used on port defined by `listen`.
 # You should only set it to false iff you intent to do SSL-termination
