@@ -147,11 +147,10 @@ ssl_key: /path/key.pem
 # Unix sockets should be secured with proper unix file permissions.
 #
 # Backend attributes:
-#   name      - the host name as in the Host HTTP header.
+#   name      - the domain name as in the Host HTTP header (without optional colon and port).
 #               May include wildcards * and ?. The first matching
 #               backend will be used. Examples: "*.example.com", "wiki.corp.com".
-#               Optional. Default is "*". Note, that the name must include
-#               port number if non-standard.
+#               Optional. Default is "*".
 #   address   - backend IP address. Optional. Default is 127.0.0.1.
 #   port      - backend TCP port. Required unless unix socket is defined.
 #   socket    - unix socket. Highly recommended for security reasons.

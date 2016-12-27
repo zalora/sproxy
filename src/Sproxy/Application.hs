@@ -55,14 +55,13 @@ import qualified Sproxy.Logging as Log
 
 redirect :: Word16 -> W.Application
 redirect p req resp =
-  case W.requestHeaderHost req of
+  case requestDomain req of
     Nothing -> badRequest "missing host" req resp
-    Just host -> do
+    Just domain -> do
       Log.info $ "redirecting to " ++ show location ++ ": " ++ showReq req
       resp $ W.responseBuilder status [(hLocation, location)] mempty
       where
         status = if W.requestMethod req == methodGet then movedPermanently301 else temporaryRedirect307
-        (domain, _) = BS.break (== _colon) host
         newhost = if p == 443 then domain else domain <> ":" <> pack (show p)
         location = "https://" <> newhost <> W.rawPathInfo req <> W.rawQueryString req
 
@@ -70,10 +69,10 @@ redirect p req resp =
 sproxy :: ByteString -> Database -> HashMap Text OAuth2Client -> [(Pattern, BackendConf, BE.Manager)] -> W.Application
 sproxy key db oa2 backends = logException $ \req resp -> do
   Log.debug $ "sproxy <<< " ++ showReq req
-  case W.requestHeaderHost req of
+  case requestDomain req of
     Nothing -> badRequest "missing host" req resp
-    Just host ->
-      case find (\(p, _, _) -> match p (unpack host)) backends of
+    Just domain ->
+      case find (\(p, _, _) -> match p (unpack domain)) backends of
         Nothing -> notFound "backend" req resp
         Just (_, be, mgr) -> do
           let cookieName = pack $ beCookieName be
@@ -145,8 +144,7 @@ extractCookie key now name req = do
 authenticate :: ByteString -> BackendConf -> AuthUser -> ByteString -> W.Application
 authenticate key be user path req resp = do
   now <- epochTime
-  let host = fromJust $ W.requestHeaderHost req
-      domain = pack <$> beCookieDomain be
+  let domain = pack <$> beCookieDomain be
       expiry = now + CTime (beCookieMaxAge be)
       authCookie = AuthCookie { acUser = user, acExpiry = expiry }
       cookie = WC.def {
@@ -160,7 +158,7 @@ authenticate key be user path req resp = do
       , WC.setCookieExpires = Just . posixSecondsToUTCTime . realToFrac $ expiry
       }
   resp $ W.responseLBS seeOther303 [
-           (hLocation, "https://" <> host <> path)
+           (hLocation, "https://" <> fromJust (W.requestHeaderHost req) <> path)
          , ("Set-Cookie", toByteString $ WC.renderSetCookie cookie)
          ] ""
 
@@ -169,7 +167,7 @@ authorize :: Database -> (AuthCookie, Cookies) -> W.Request -> IO (Maybe W.Reque
 authorize db (authCookie, otherCookies) req = do
   let
     user       = acUser authCookie
-    domain     = decodeUtf8 . fromJust $ W.requestHeaderHost req
+    domain     = decodeUtf8 . fromJust $ requestDomain req
     email      = getEmail user
     emailUtf8  = getEmailUtf8 user
     familyUtf8 = getFamilyNameUtf8 user
@@ -386,6 +384,12 @@ redirectURL :: W.Request -> Text -> ByteString
 redirectURL req provider =
   "https://" <> fromJust (W.requestHeaderHost req)
              <> "/.sproxy/oauth2/" <> encodeUtf8 provider
+
+
+requestDomain :: W.Request -> Maybe ByteString
+requestDomain req = do
+  h <- W.requestHeaderHost req
+  return . fst . BS.break (== _colon) $ h
 
 
 -- XXX: make sure not to reveal the cookie, which can be valid (!)
