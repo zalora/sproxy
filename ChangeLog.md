@@ -72,7 +72,7 @@ Here are the key differences (with Sproxy 0.9.8):
     as sproxy does it on every HTTP request. Sproxy2 pulls data into local SQLite3 database.
 
   * At this release Sproxy2 is compatible with Sproxy database with one exception:
-    SQL wildcards are not supported for HTTP methods. E. i. you have to change '%' in
+    SQL wildcards are not supported for HTTP methods. I. e. you have to change '%' in
     the database to specific methods like GET, POST, etc.
 
   * OAuth2 callback URLs changed: Sproxy2 uses `/.sproxy/oauth2/:provider`,
