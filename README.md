@@ -33,7 +33,9 @@ Why use a proxy for doing OAuth2? Isn't that up to the application?
    application's API.  It would likely be [a single-page
    application](https://en.wikipedia.org/wiki/Single-page_application).
    Examples are [MyWatch](https://hackage.haskell.org/package/mywatch) and
-   [Juan de la Cosa](https://hackage.haskell.org/package/juandelacosa)
+   [Juan de la Cosa](https://hackage.haskell.org/package/juandelacosa).
+
+ * Replace HTTP Basic authentication.
 
 
 How it works
