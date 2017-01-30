@@ -1,5 +1,20 @@
 For differences with the original Sproxy scroll down.
 
+1.94.0
+======
+
+  * BREAKING: Disregard possible port in the Host HTTP header.
+    Previously, Sproxy took possible port number into account when
+    looking for backend and privileges. Now it ignores port and considers
+    domain name only.  This also gets Sproxy in line with browsers and SSL
+    certificates: certificates do not include port numbers, browsers ignore
+    ports when sending cookies.
+
+  * BREAKING: no SQL wildcards (`%` or `_`) in domain names when looking up
+    for privileges.  This feature was ambiguous (in the same way as paths are)
+    and never used anyway.
+
+
 1.93.0
 ======
 
