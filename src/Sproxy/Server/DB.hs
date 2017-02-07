@@ -69,7 +69,7 @@ userGroups db email domain path method =
       AND gp.domain = :domain
       AND gp.privilege IN (
         SELECT privilege FROM privilege_rule
-        WHERE domain = domain
+        WHERE domain = :domain
         AND :path LIKE path
         AND method = :method
         ORDER BY length(path) - length(replace(path, '/', '')) DESC LIMIT 1
