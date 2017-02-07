@@ -1,5 +1,12 @@
 For differences with the original Sproxy scroll down.
 
+1.94.1
+======
+
+  * Fixed a typo introduced in version 1.94.0 in SQL query:
+    `... WHERE domain = domain ...` -> `... WHERE domain = :domain ...`
+
+
 1.94.0
 ======
 
