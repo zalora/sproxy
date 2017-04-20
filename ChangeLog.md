@@ -122,5 +122,5 @@ Here are the key differences (with Sproxy 0.9.8):
     This can be used in load-balancing multiple Sproxy2 instances.
 
   * Configuration file has changed. It's still YAML, but some options are renamed, removed or added.
-    Have a look at well-documented [sproxy.yml.example](./sproxy.yml.example)
+    Have a look at well-documented [sproxy.example.yml](./sproxy.example.yml)
 
