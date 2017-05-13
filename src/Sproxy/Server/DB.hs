@@ -3,6 +3,7 @@
 module Sproxy.Server.DB (
   Database
 , DataSource(..)
+, userAccess
 , userExists
 , userGroups
 , start
@@ -10,18 +11,20 @@ module Sproxy.Server.DB (
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Exception (SomeException, bracket, catch, finally)
-import Control.Monad (forever, void)
+import Control.Monad (filterM, forever, void)
 import Data.ByteString.Char8 (pack)
 import Data.Pool (Pool, createPool, withResource)
 import Data.Text (Text, toLower, unpack)
 import Data.Yaml (decodeFileEither)
 import Database.SQLite.Simple (NamedParam((:=)))
 import Text.InterpolatedString.Perl6 (q, qc)
+import qualified Data.HashMap.Strict as HM
 import qualified Database.PostgreSQL.Simple as PG
 import qualified Database.SQLite.Simple as SQLite
 
 import Sproxy.Server.DB.DataFile ( DataFile(..), GroupMember(..),
   GroupPrivilege(..), PrivilegeRule(..) )
+import qualified Sproxy.Application.Access as A
 import qualified Sproxy.Logging as Log
 
 
@@ -61,24 +64,36 @@ userExists db email = do
   return $ head r
 
 
-userGroups :: Database -> Text -> Text -> Text -> Text -> IO [Text]
-userGroups db email domain path method =
-  withResource db $ \c -> fmap SQLite.fromOnly <$> SQLite.queryNamed c [q|
-      SELECT gm."group" FROM group_privilege gp JOIN group_member gm ON gm."group"  = gp."group"
-      WHERE :email LIKE gm.email
-      AND gp.domain = :domain
-      AND gp.privilege IN (
-        SELECT privilege FROM privilege_rule
-        WHERE domain = :domain
-        AND :path LIKE path
-        AND method = :method
-        ORDER BY length(path) - length(replace(path, '/', '')) DESC LIMIT 1
-      )
+userGroups_ :: SQLite.Connection -> Text -> Text -> Text -> Text -> IO [Text]
+userGroups_ c email domain path method =
+  fmap SQLite.fromOnly <$> SQLite.queryNamed c [q|
+    SELECT gm."group" FROM group_privilege gp JOIN group_member gm ON gm."group"  = gp."group"
+    WHERE :email LIKE gm.email
+    AND gp.domain = :domain
+    AND gp.privilege IN (
+      SELECT privilege FROM privilege_rule
+      WHERE domain = :domain
+      AND :path LIKE path
+      AND method = :method
+      ORDER BY length(path) - length(replace(path, '/', '')) DESC LIMIT 1
+    )
   |] [ ":email"  := email -- XXX always in lower case
      , ":domain" := toLower domain
      , ":path"   := path
      , ":method" := method -- XXX case-sensitive by RFC2616
      ]
+
+
+userAccess :: Database -> Text -> Text -> A.Inquiry -> IO [Text]
+userAccess db email domain inq = do
+  let permitted c (_, qn) =
+        not . null <$> userGroups_ c email domain (A.path qn) (A.method qn)
+  map fst <$> withResource db (\c -> filterM (permitted c) (HM.toList inq))
+
+
+userGroups :: Database -> Text -> Text -> Text -> Text -> IO [Text]
+userGroups db email domain path method =
+  withResource db $ \c -> userGroups_ c email domain path method
 
 
 populate :: Database -> Maybe DataSource -> IO ()

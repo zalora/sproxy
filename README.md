@@ -140,6 +140,58 @@ Keep in mind that:
 - SQL wildcards (`_` and `%`) are supported for emails, paths (this _will_ change in future versions).
 
 
+Checking access in a bunch
+--------------------------
+
+There is an API end-point for checking access rights in a single POST query:
+`/.sproxy/access`.  Users should be authenticated to use this end-point,
+otherwise the respond will be HTTP 511.
+
+The request body shall be a JSON object like this:
+
+```json
+{
+  "tag1": {"path": "/foo", "method": "GET"},
+  "tag2": {"path": "/bar", "method": "GET"}
+}
+```
+
+And the respond will contain a JSON array with tag matching path and method
+pairs allowed to the user.  For example:
+
+```sh
+$ curl -d '{"foo": {"path":"/get", "method":"GET"}, "bar": {"path":"/post", "method":"POST"}}' -XPOST -k 'https://example.ru:8443/.sproxy/access' ...
+["foo","bar"]
+
+$ curl -d '{"foo": {"path":"/get", "method":"POST"}, "bar": {"path":"/post", "method":"POST"}}' -XPOST -k 'https://example.ru:8443/.sproxy/access' ...
+["bar"]
+
+$ curl -d '{"foo": {"path":"/", "method":"POST"}, "bar": {"path":"/post", "method":"GET"}}' -XPOST -k 'https://example.ru:8443/.sproxy/access' ...
+[]
+
+```
+
+
+Logout
+------
+
+Hitting the endpoint `/.sproxy/logout` will invalidate the session cookie.
+The user will be redirected to `/` after logout.
+
+
+Robots
+------
+
+Since all sproxied resources are private, it doesn't make sense for web
+crawlers to try to index them. In fact, crawlers will index only the login
+page. To prevent this, sproxy returns the following for `/robots.txt`:
+
+```
+User-agent: *
+Disallow: /
+```
+
+
 HTTP headers passed to the back-end server
 ------------------------------------------
 
@@ -166,26 +218,6 @@ all, devops      | all, devops    | all,devops
 all, devops      | devops         | devops
 devops           | all, devops    | devops
 devops           | all            | Access denied
-
-
-Logout
-------
-
-Hitting the endpoint `/.sproxy/logout` will invalidate the session cookie.
-The user will be redirected to `/` after logout.
-
-
-Robots
-------
-
-Since all sproxied resources are private, it doesn't make sense for web
-crawlers to try to index them. In fact, crawlers will index only the login
-page. To prevent this, sproxy returns the following for `/robots.txt`:
-
-```
-User-agent: *
-Disallow: /
-```
 
 
 Requirements

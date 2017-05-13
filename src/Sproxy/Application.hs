@@ -27,7 +27,7 @@ import Data.Word8 (_colon)
 import Foreign.C.Types (CTime(..))
 import Network.HTTP.Client.Conduit (bodyReaderSource)
 import Network.HTTP.Conduit (requestBodySourceChunkedIO, requestBodySourceIO)
-import Network.HTTP.Types (RequestHeaders, ResponseHeaders, methodGet)
+import Network.HTTP.Types (RequestHeaders, ResponseHeaders, methodGet, methodPost)
 import Network.HTTP.Types.Header ( hConnection,
   hContentLength, hContentType, hCookie, hLocation, hTransferEncoding )
 import Network.HTTP.Types.Status ( Status(..), badRequest400, forbidden403, found302,
@@ -39,6 +39,7 @@ import System.FilePath.Glob (Pattern, match)
 import System.Posix.Time (epochTime)
 import Text.InterpolatedString.Perl6 (qc)
 import Web.Cookie (Cookies, parseCookies, renderCookies)
+import qualified Data.Aeson as JSON
 import qualified Network.HTTP.Client as BE
 import qualified Network.Wai as W
 import qualified Web.Cookie as WC
@@ -48,7 +49,7 @@ import Sproxy.Application.Cookie ( AuthCookie(..), AuthUser,
   getGivenNameUtf8 )
 import Sproxy.Application.OAuth2.Common (OAuth2Client(..))
 import Sproxy.Config(BackendConf(..))
-import Sproxy.Server.DB (Database, userExists, userGroups)
+import Sproxy.Server.DB (Database, userAccess, userExists, userGroups)
 import qualified Sproxy.Application.State as State
 import qualified Sproxy.Logging as Log
 
@@ -81,12 +82,22 @@ sproxy key db oa2 backends = logException $ \req resp -> do
             ["robots.txt"] -> get robots req resp
             (".sproxy":proxy) ->
               case proxy of
+
                 ["logout"] -> get (logout key cookieName cookieDomain) req resp
+
                 ["oauth2", provider] ->
                     case HM.lookup provider oa2 of
                       Nothing -> notFound "OAuth2 provider" req resp
                       Just oa2c -> get (oauth2callback key db (provider, oa2c) be) req resp
+
+                ["access"] -> do
+                  now <- Just <$> epochTime
+                  case extractCookie key now cookieName req of
+                    Nothing -> authenticationRequired key oa2 req resp
+                    Just (authCookie, _) -> post (checkAccess db authCookie) req resp
+
                 _ -> notFound "proxy" req resp
+
             _ -> do
               now <- Just <$> epochTime
               case extractCookie key now cookieName req of
@@ -193,6 +204,20 @@ authorize db (authCookie, otherCookies) req = do
     combine a b = a <> "," <> b
     setCookies [] = delete hCookie
     setCookies cs = insert hCookie (toByteString . renderCookies $ cs)
+
+
+checkAccess :: Database -> AuthCookie -> W.Application
+checkAccess db authCookie req resp = do
+  let email = getEmail . acUser $ authCookie
+      domain = decodeUtf8 . fromJust $ requestDomain req
+  body <- W.strictRequestBody req
+  case JSON.eitherDecode' body of
+    Left err -> badRequest err req resp
+    Right inq -> do
+      Log.debug $ "access <<< " ++ show inq
+      tags <- userAccess db email domain inq
+      Log.debug $ "access >>> " ++ show tags
+      resp $ W.responseLBS ok200 [(hContentType, "application/json")] (JSON.encode tags)
 
 
 -- XXX If something seems strange, think about HTTP/1.1 <-> HTTP/1.0.
@@ -378,6 +403,14 @@ get app req resp
   | otherwise = do
     Log.warn $ "405 Method Not Allowed: " ++ showReq req
     resp $ W.responseLBS methodNotAllowed405 [("Allow", "GET")] "Method Not Allowed"
+
+
+post :: W.Middleware
+post app req resp
+  | W.requestMethod req == methodPost = app req resp
+  | otherwise = do
+    Log.warn $ "405 Method Not Allowed: " ++ showReq req
+    resp $ W.responseLBS methodNotAllowed405 [("Allow", "POST")] "Method Not Allowed"
 
 
 redirectURL :: W.Request -> Text -> ByteString

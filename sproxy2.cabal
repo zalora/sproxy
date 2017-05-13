@@ -32,6 +32,7 @@ executable sproxy2
     main-is: Main.hs
     other-modules:
       Sproxy.Application
+      Sproxy.Application.Access
       Sproxy.Application.Cookie
       Sproxy.Application.OAuth2
       Sproxy.Application.OAuth2.Common
