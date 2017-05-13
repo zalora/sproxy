@@ -30,8 +30,8 @@ import Network.HTTP.Conduit (requestBodySourceChunkedIO, requestBodySourceIO)
 import Network.HTTP.Types (RequestHeaders, ResponseHeaders, methodGet, methodPost)
 import Network.HTTP.Types.Header ( hConnection,
   hContentLength, hContentType, hCookie, hLocation, hTransferEncoding )
-import Network.HTTP.Types.Status ( Status(..), badRequest400, forbidden403, found302,
-  internalServerError500, methodNotAllowed405, movedPermanently301,
+import Network.HTTP.Types.Status ( Status(..), badGateway502, badRequest400, forbidden403,
+  found302, internalServerError500, methodNotAllowed405, movedPermanently301,
   networkAuthenticationRequired511, notFound404, ok200, seeOther303, temporaryRedirect307 )
 import Network.Socket (NameInfoFlag(NI_NUMERICHOST), getNameInfo)
 import Network.Wai.Conduit (sourceRequestBody, responseSource)
@@ -383,11 +383,15 @@ notFound msg req resp = do
 logException :: W.Middleware
 logException app req resp =
   catches (app req resp) [
+    Handler badGateway,
     Handler internalError
   ]
   where
     internalError :: SomeException -> IO W.ResponseReceived
     internalError = response internalServerError500
+
+    badGateway :: BE.HttpException -> IO W.ResponseReceived
+    badGateway = response badGateway502
 
     response :: Exception e => Status -> e -> IO W.ResponseReceived
     response st e = do
