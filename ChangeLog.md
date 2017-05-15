@@ -1,5 +1,13 @@
 For differences with the original Sproxy scroll down.
 
+1.95.0
+======
+
+  * Add end-point for checking access in a bunch (`/.sproxy/access`).
+
+  * Respond with 502 (Bad Gateway) on any backend error.
+    Previously it was 500 (Internal Server Error).
+
 1.94.1
 ======
 
