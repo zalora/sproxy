@@ -99,7 +99,7 @@ ssl_key: /path/key.pem
 # and existing data in the internal database.
 # Useful for development or some simple deployments.
 # Cannot be used with the `database` option.
-# For example see the datafile.yml.example
+# For example see the datafile.example.yml
 #
 # datafile: /path/data.yml
 
