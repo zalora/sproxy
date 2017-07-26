@@ -121,7 +121,8 @@ ssl_key: /path/key.pem
 #   client_id     - OAuth2 client ID.
 #   client_secret - OAuth2 client secret.
 #
-# Example:
+# Examples:
+#
 # oauth2:
 #   google:
 #     client_id: "XXXXXXXXXXXX-YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY.apps.googleusercontent.com"
@@ -130,6 +131,10 @@ ssl_key: /path/key.pem
 #   linkedin:
 #     client_id: "xxxxxxxxxxxxxx"
 #     client_secret: !include "/run/keys/xxxxxxxxxxxxxx"
+#
+#   yandex:
+#     client_id: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#     client_secret: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 #
 #
 # oauth2:
