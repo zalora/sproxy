@@ -1,0 +1,13 @@
+resolver: lts-9.0
+system-ghc: true
+install-ghc: false
+packages:
+
+- '.'
+
+extra-deps: []
+
+flags: {}
+
+extra-package-dbs: []
+
