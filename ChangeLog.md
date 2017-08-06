@@ -1,5 +1,18 @@
 For differences with the original Sproxy scroll down.
 
+1.96.0
+======
+
+  * Added support for Yandex (https://tech.yandex.com/oauth/).
+
+  * Encode full URL (including protocol) into the state parameter,
+    not just path.  This makes it possible to work with OAuth2 providers
+    that do not support multiple callback URL, like Yandex.
+
+  * Fixed POST requests for tokens with Google and LinkedIn. They
+    were mistakenly using URL paramaters instead of URL-encoded bodies.
+
+
 1.95.0
 ======
 
@@ -7,6 +20,7 @@ For differences with the original Sproxy scroll down.
 
   * Respond with 502 (Bad Gateway) on any backend error.
     Previously it was 500 (Internal Server Error).
+
 
 1.94.1
 ======

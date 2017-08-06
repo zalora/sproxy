@@ -1,5 +1,5 @@
 name: sproxy2
-version: 1.95.0
+version: 1.96.0
 synopsis: Secure HTTP proxy for authenticating users via OAuth2
 description:
   Sproxy is secure by default. No requests makes it to the backend
