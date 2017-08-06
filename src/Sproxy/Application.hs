@@ -124,12 +124,12 @@ oauth2callback key db (provider, oa2c) be req resp =
         Just state ->
           case State.decode key state of
             Left msg   -> badRequest ("invalid state: " ++ msg) req resp
-            Right path -> do
+            Right url -> do
               au <- oauth2Authenticate oa2c code (redirectURL req provider)
               let email = getEmail au
               Log.info $ "login " ++ show email ++ " by " ++ show provider
               exists <- userExists db email
-              if exists then authenticate key be au path req resp
+              if exists then authenticate key be au url req resp
                         else userNotFound au req resp
   where
     param p = do
@@ -153,7 +153,7 @@ extractCookie key now name req = do
 
 
 authenticate :: ByteString -> BackendConf -> AuthUser -> ByteString -> W.Application
-authenticate key be user path req resp = do
+authenticate key be user url _req resp = do
   now <- epochTime
   let domain = pack <$> beCookieDomain be
       expiry = now + CTime (beCookieMaxAge be)
@@ -169,7 +169,7 @@ authenticate key be user path req resp = do
       , WC.setCookieExpires = Just . posixSecondsToUTCTime . realToFrac $ expiry
       }
   resp $ W.responseLBS seeOther303 [
-           (hLocation, "https://" <> fromJust (W.requestHeaderHost req) <> path)
+           (hLocation, url)
          , ("Set-Cookie", toByteString $ WC.renderSetCookie cookie)
          ] ""
 
@@ -280,7 +280,7 @@ authenticationRequired key oa2 req resp = do
     path = if W.requestMethod req == methodGet
            then W.rawPathInfo req <> W.rawQueryString req
            else "/"
-    state = State.encode key path
+    state = State.encode key $ "https://" <> fromJust (W.requestHeaderHost req) <> path
     authLink :: Text -> OAuth2Client -> ByteString -> ByteString
     authLink provider oa2c html = 
       let u = oauth2AuthorizeURL oa2c state (redirectURL req provider)
